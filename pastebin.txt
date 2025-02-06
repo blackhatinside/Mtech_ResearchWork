@@ -1,3 +1,15 @@
+Table 4.1: Comparison of Dice Scores: Benchmark vs Experiment Results
+Benchmark Results (For Lesion Only)
+Case Image Format Model Type Test Dice Score
+1 .nii U-Net 0.6675
+Experiment Results (For Lesion Only)
+Case Image Format Analysis Type Test Dice Score
+1 PNG Attention U-Net 0.6651
+2 PNG + augmentation Attention U-Net 0.7307
+3 PNG + augmentation U-Net 0.7451
+
+
+
 import cv2
 import numpy as np
 import os
