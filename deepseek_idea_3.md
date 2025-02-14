@@ -207,3 +207,45 @@ If time constraints occur, implement these simplified versions:
 ---
 
 This approach combines anatomical reality with AI-driven augmentation while building directly on your existing codebase. The biomechanical deformation and hemodynamic simulation components are completely novel in lesion segmentation literature (), offering strong publication potential while remaining implementable within a semester.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+HIMRA Differences:
+
+Parameter | HIMRA1 | HIMRA2 | HIMRA3 | HIMRA4
+----------|--------|--------|--------|--------
+LR | 0.001 | 0.001 | 0.0005 | 0.001
+Epochs | 100 | 100 | 200 | 100
+Early Stop | 40 | 40 | 60 | 60
+Biomech Deform sigma | 5 | 3 | 3 | 3
+Deform Probability | 100% | 100% | 100% | 25%
+Hemodynamic range | (0.8,1.2) | (0.7,1.3) | (0.7,1.3) | (0.7,1.3)
+
+Performance Summary:
+
+Metric | HIMRA1 | HIMRA2 | HIMRA3 | HIMRA4
+-------|--------|--------|--------|--------
+Mean Divergence | 0.0239 | 0.0216 | 0.0245 | 0.0265
+Total Deviation | 0.1196 | 0.1080 | 0.1227 | 0.1323
+
+HIMRA2 shows best performance with lowest mean divergence and total deviation from baseline.
