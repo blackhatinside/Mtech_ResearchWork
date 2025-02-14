@@ -256,3 +256,39 @@ Mean Divergence | 0.0239 | 0.0216 | 0.0245 | 0.0265
 Total Deviation | 0.1196 | 0.1080 | 0.1227 | 0.1323
 
 HIMRA2 shows best performance with lowest mean divergence and total deviation from baseline.
+
+
+
+
+
+Let me explain HIMRA's three key enhancements in simple, everyday terms:
+
+Biomechanical Deformation
+Think of brain tissue like a sponge. When you press one part, nearby areas also move and stretch, but areas further away stay mostly unchanged. HIMRA simulates this natural tissue behavior:
+
+
+First, it finds where the lesion is in the image
+Then, it creates a "stiffness map" - areas near the lesion move less (like firm tissue) while areas further away can move more freely
+When we deform the image, it looks more natural because it respects how real brain tissue would behave
+
+
+Hemodynamic (Blood Flow) Simulation
+Imagine a river where water flow is blocked by a fallen tree. The water behavior changes around the blockage. Similarly, in stroke:
+
+
+Normal brain tissue has regular blood flow (like a flowing river)
+Stroke areas have restricted blood flow (like the blocked river)
+ADC maps show this restriction - bright areas mean water molecules move freely, dark areas show restriction
+HIMRA creates synthetic ADC patterns to make augmented images look more like real stroke cases
+
+
+Attention-guided Occlusion
+Think of this like a photographer using selective focus. Instead of randomly changing the whole image:
+
+
+HIMRA identifies important areas in the image
+It applies changes more carefully in these important regions
+Less important areas might get slightly blurred or modified
+This helps the model learn to focus on clinically relevant features
+
+Previous augmentation was like using basic photo editing tools (rotate, brighten, add noise). HIMRA is more like having a medical expert guide the image creation process, considering real tissue properties and blood flow patterns.
