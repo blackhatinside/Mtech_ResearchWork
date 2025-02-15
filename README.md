@@ -2,7 +2,7 @@
 Brain Legion Segmentation using Python
 
 
-Here's a detailed summary of the research project and ISLES22 dataset:
+Here's a detailed summary of the research project I am working on in my MTech Thesis work and also information about the ISLES22 dataset:
 
 Research Project Overview:
 The project focuses on brain lesion segmentation using class-aware augmentation techniques combined with an Attention U-Net architecture. The key objectives were:
@@ -16,6 +16,7 @@ ISLES22 Dataset Characteristics:
 - Images in NIfTI format converted to PNG (112x112 pixels)
 - Contains DWI (Diffusion-weighted imaging) scans with corresponding lesion masks
 - Ground truth masks are binary (white for lesion, black for non-lesion)
+- Lesions can vary in sizes and shapes, may be as small as a single pixel
 
 Key Methodology:
 1. Data Preprocessing:
