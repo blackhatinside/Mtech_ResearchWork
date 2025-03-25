@@ -41,7 +41,7 @@ os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 IMG_SIZE = 112
 BATCH_SIZE = 4
 LEARNINGRATE = 0.001
-EPOCHS = 150
+EPOCHS = 100
 EARLYSTOPPING = 60
 scaler = MinMaxScaler(feature_range=(-1, 1))
 
@@ -103,7 +103,7 @@ def grow_small_lesion(image, mask, target_size=45):
 	"""Grow small lesions to approach 50 pixels while staying within brain boundaries"""
 	brain_mask = (image != -1)
 	current_size = np.sum(mask > 0)
-	if current_size == 0 or current_size >= 25: # upto 25 pixel lesions only
+	if current_size == 0 or current_size >= 50:
 		return image, mask
 		
 	iterations = 0
@@ -137,7 +137,7 @@ def biomechanical_deformation(image, mask, lesion_class):
 	if lesion_class == 1:  # Less than 50 pixels
 		image, mask = grow_small_lesion(image, mask)
 	
-	lesion_pixels = np.where(mask > 0) # Store all (x, y) coordinates of lesion pixels
+	lesion_pixels = np.where(mask > 0)
 	if len(lesion_pixels[0]) == 0:
 		return image, mask
 	
@@ -280,141 +280,77 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
 # In[8]:
 
 
-# def conv_block(inp, filters):
-# 	x = Conv2D(filters, 3, padding='same', use_bias=False)(inp)
-# 	x = BatchNormalization()(x)
-# 	return Activation('relu')(x)
-
-# def attention_gate(x, g, filters):
-# 	g1 = Conv2D(filters, 1)(g)
-# 	x1 = Conv2D(filters, 1)(x)
-# 	out = Activation('relu')(add([g1, x1]))
-# 	out = Conv2D(1, 1, activation='sigmoid')(out)
-# 	return multiply([x, out])
-
-
-def dice_score(y_true, y_pred):
-	intersection = tf.reduce_sum(y_true * y_pred)
-	union = tf.reduce_sum(y_true) + tf.reduce_sum(y_pred)
-	dice = (2.0 * intersection + 1e-5) / (union + 1e-5)
-	return dice
-
 def conv_block(inp, filters):
-	x = Conv2D(filters, (3,3), padding='same', activation='relu')(inp)
-	x = Conv2D(filters, (3,3), padding='same')(x)
-	x = BatchNormalization(axis=3)(x)
-	x = Activation('relu')(x)
-	return x
+	x = Conv2D(filters, 3, padding='same', use_bias=False)(inp)
+	x = BatchNormalization()(x)
+	return Activation('relu')(x)
 
-def encoder_block(inp, filters):
-	x = conv_block(inp, filters)
-	p = MaxPooling2D(pool_size=(2,2))(x)
-	return x, p
-
-def attention_block(l_layer, h_layer):
-	phi = Conv2D(h_layer.shape[-1], (1,1), padding='same')(l_layer)
-	theta = Conv2D(h_layer.shape[-1], (1,1), strides=(2,2), padding='same')(h_layer)
-	x = tf.keras.layers.add([phi, theta])
-	x = Activation('relu')(x)
-	x = Conv2D(1, (1,1), padding='same', activation='sigmoid')(x)
-	x = UpSampling2D(size=(2,2))(x)
-	x = tf.keras.layers.multiply([h_layer, x])
-	x = BatchNormalization(axis=3)(x)
-	return x
-
-def decoder_block(inp, filters, concat_layer):
-	x = Conv2DTranspose(filters, (2,2), strides=(2,2), padding='same')(inp)
-	x = concatenate([x, concat_layer])
-	x = conv_block(x, filters)
-	return x
+def attention_gate(x, g, filters):
+	g1 = Conv2D(filters, 1)(g)
+	x1 = Conv2D(filters, 1)(x)
+	out = Activation('relu')(add([g1, x1]))
+	out = Conv2D(1, 1, activation='sigmoid')(out)
+	return multiply([x, out])
 
 
 # In[9]:
 
 
-# def create_model():
-# 	inputs = Input((IMG_SIZE, IMG_SIZE, 1))
-
-# 	# Encoder with reduced filters
-# 	x = conv_block(inputs, 32)
-# 	skip1 = x
-# 	x = MaxPooling2D()(x)
-
-# 	x = conv_block(x, 64)
-# 	skip2 = x
-# 	x = MaxPooling2D()(x)
-
-# 	x = conv_block(x, 128)
-# 	skip3 = x
-# 	x = MaxPooling2D()(x)
-
-# 	x = conv_block(x, 256)
-# 	skip4 = x
-# 	x = MaxPooling2D()(x)
-
-# 	# Bridge
-# 	x = conv_block(x, 512)
-
-# 	# Decoder with attention
-# 	x = Conv2DTranspose(256, 3, strides=2, padding='same')(x)
-# 	x = attention_gate(skip4, x, 256)
-# 	x = concatenate([x, skip4])
-# 	x = conv_block(x, 256)
-
-# 	x = Conv2DTranspose(128, 3, strides=2, padding='same')(x)
-# 	x = attention_gate(skip3, x, 128)
-# 	x = concatenate([x, skip3])
-# 	x = conv_block(x, 128)
-
-# 	x = Conv2DTranspose(64, 3, strides=2, padding='same')(x)
-# 	x = attention_gate(skip2, x, 64)
-# 	x = concatenate([x, skip2])
-# 	x = conv_block(x, 64)
-
-# 	x = Conv2DTranspose(32, 3, strides=2, padding='same')(x)
-# 	x = attention_gate(skip1, x, 32)
-# 	x = concatenate([x, skip1])
-# 	x = conv_block(x, 32)
-
-# 	outputs = Conv2D(1, 1, activation='sigmoid')(x)
-
-# 	model = Model(inputs, outputs)
-
-# 	model.compile(
-# 		optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNINGRATE),
-# 		loss=dice_loss,
-# 		metrics=['accuracy', dice_coeff, iou]
-# 	)
-
-# 	return model
-
-
 def create_model():
-    inputs = Input((112,112,1))
+	inputs = Input((IMG_SIZE, IMG_SIZE, 1))
 
-    d1, p1 = encoder_block(inputs, 32)
-    d2, p2 = encoder_block(p1, 64)
-    d3, p3 = encoder_block(p2, 128)
-    d4, p4 = encoder_block(p3, 256)
+	# Encoder with reduced filters
+	x = conv_block(inputs, 32)
+	skip1 = x
+	x = MaxPooling2D()(x)
 
-    b1 = conv_block(p4, 1024)
+	x = conv_block(x, 64)
+	skip2 = x
+	x = MaxPooling2D()(x)
 
-    e2 = decoder_block(b1, 256, d4)
-    e3 = decoder_block(e2, 128, d3)
-    e4 = decoder_block(e3, 64, d2)
-    e5 = decoder_block(e4, 32, d1)
+	x = conv_block(x, 128)
+	skip3 = x
+	x = MaxPooling2D()(x)
 
-    outputs = Conv2D(1, (1,1), activation="sigmoid")(e5)
+	x = conv_block(x, 256)
+	skip4 = x
+	x = MaxPooling2D()(x)
 
-    model = Model(inputs=[inputs], outputs=[outputs], name='AttentionUnet')
+	# Bridge
+	x = conv_block(x, 512)
 
-    model.compile(
-        loss=single_dice_loss,
-        optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
-        metrics=['accuracy', dice_coeff, dice_score, iou]
-    )
+	# Decoder with attention
+	x = Conv2DTranspose(256, 3, strides=2, padding='same')(x)
+	x = attention_gate(skip4, x, 256)
+	x = concatenate([x, skip4])
+	x = conv_block(x, 256)
 
-    return model
+	x = Conv2DTranspose(128, 3, strides=2, padding='same')(x)
+	x = attention_gate(skip3, x, 128)
+	x = concatenate([x, skip3])
+	x = conv_block(x, 128)
+
+	x = Conv2DTranspose(64, 3, strides=2, padding='same')(x)
+	x = attention_gate(skip2, x, 64)
+	x = concatenate([x, skip2])
+	x = conv_block(x, 64)
+
+	x = Conv2DTranspose(32, 3, strides=2, padding='same')(x)
+	x = attention_gate(skip1, x, 32)
+	x = concatenate([x, skip1])
+	x = conv_block(x, 32)
+
+	outputs = Conv2D(1, 1, activation='sigmoid')(x)
+
+	model = Model(inputs, outputs)
+
+	model.compile(
+		optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNINGRATE),
+		loss=dice_loss,
+		metrics=['accuracy', dice_coeff, iou]
+	)
+
+	return model
 
 
 # In[10]:
@@ -1117,4 +1053,79 @@ for sample in test_samples:
     mask_path = os.path.join(MASK_PATH, sample)
     save_path = visualize_himra_augmentation(image_path, mask_path, output_dir)
     print(f"Saved HIMRA visualization for {sample} to {save_path}")
+
+
+def calculate_class_wise_dice(model, test_gen):
+    # Initialize dictionaries to store results
+    class_dice_scores = {f'C{i}': [] for i in range(1, 6)}
+    
+    # Process all test samples
+    for batch_x, batch_y in test_gen:
+        predictions = model.predict(batch_x)
+        predictions = (predictions > 0.5).astype(np.float32)
+        
+        for i in range(len(batch_y)):
+            true_mask = batch_y[i]
+            pred_mask = predictions[i,:,:,0]
+            
+            # Calculate lesion size
+            lesion_size = np.sum(true_mask)
+            
+            # Determine class
+            if lesion_size == 0:
+                continue
+            elif lesion_size <= 50:
+                class_name = 'C1'
+            elif lesion_size <= 100:
+                class_name = 'C2'
+            elif lesion_size <= 150:
+                class_name = 'C3'
+            elif lesion_size <= 200:
+                class_name = 'C4'
+            else:
+                class_name = 'C5'
+            
+            # Calculate Dice score
+            dice = numpy_dice_coeff(true_mask, pred_mask)
+            class_dice_scores[class_name].append(dice)
+    
+    # Calculate mean Dice scores for each class
+    mean_dice_scores = {cls: np.mean(scores) if scores else 0 for cls, scores in class_dice_scores.items()}
+    
+    return mean_dice_scores
+
+def visualize_class_wise_dice(scores, output_dir):
+    # Prepare data for plotting
+    classes = sorted(scores.keys())
+    values = [scores[cls] for cls in classes]
+    
+    # Create bar plot
+    plt.figure(figsize=(10, 6))
+    plt.bar(classes, values, color='skyblue')
+    plt.xlabel('Lesion Size Class')
+    plt.ylabel('Mean Dice Score')
+    plt.title('Class-wise Dice Scores')
+    plt.ylim(0, 1)
+    
+    # Add value labels
+    for i, v in enumerate(values):
+        plt.text(i, v + 0.02, f"{v:.3f}", ha='center')
+    
+    # Save and show plot
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    save_path = os.path.join(output_dir, f'class_wise_dice_{timestamp}.png')
+    plt.tight_layout()
+    plt.savefig(save_path, bbox_inches='tight', dpi=300)
+    plt.close()
+    return save_path
+
+# After model training and evaluation
+class_wise_dice = calculate_class_wise_dice(model, test_gen)
+print("\nClass-wise Dice Scores:")
+for cls, score in class_wise_dice.items():
+    print(f"{cls}: {score:.4f}")
+
+# Visualize results
+save_path = visualize_class_wise_dice(class_wise_dice, OUTPUT_DIRECTORY)
+print(f"\nSaved class-wise Dice scores visualization to: {save_path}")
 
