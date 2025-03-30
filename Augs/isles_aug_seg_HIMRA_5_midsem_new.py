@@ -60,12 +60,49 @@ def iou(y_true, y_pred):
 	union = K.sum(y_true + y_pred)
 	return (intersection + 0.1) / (union - intersection + 0.1)
 
+# Loss Functions
+# ```
+def single_dice_loss(y_true, y_pred):
+    return 1.0 - dice_score(y_true, y_pred)
+
+def binary_crossentropy_loss(y_true, y_pred):
+    return tf.keras.losses.BinaryCrossentropy()(y_true, y_pred)
+
+def binary_focal_loss(gamma=2., alpha=0.25):
+    def focal_loss(y_true, y_pred):
+        y_true = tf.cast(y_true, tf.float32)
+        y_pred = tf.cast(y_pred, tf.float32)
+        epsilon = K.epsilon()
+        y_pred = K.clip(y_pred, epsilon, 1. - epsilon)
+        alpha_t = y_true * alpha + (K.ones_like(y_true) - y_true) * (1 - alpha)
+        p_t = y_true * y_pred + (K.ones_like(y_true) - y_true) * (1 - y_pred)
+        focal_loss = - alpha_t * K.pow((K.ones_like(y_true) - p_t), gamma) * K.log(p_t)
+        return K.mean(focal_loss)
+    return focal_loss
+# ```
+
 def dice_loss(y_true, y_pred):
-	# Add class weighting
+	# Get lesion size for class weighting
 	lesion_size = K.sum(y_true)
-	weight = tf.where(lesion_size < 50, 2.0, 1.0)  # Higher weight for small lesions
-	return weight * (tf.keras.losses.binary_crossentropy(y_true, y_pred) + 
-					(1 - dice_coeff(y_true, y_pred)))
+	
+	# Class-specific weighting
+	weight = tf.where(
+		lesion_size < 50, 3.0,  # Higher weight for C1
+		tf.where(
+			lesion_size < 100, 1.5,  # Medium weight for C2
+			1.0  # Normal weight for others
+		)
+	)
+	
+	# Combine multiple loss functions
+	dice_term = 1 - dice_coeff(y_true, y_pred)
+	focal_loss = binary_focal_loss(gamma=2., alpha=0.25)(y_true, y_pred)
+	bce_loss = binary_crossentropy_loss(y_true, y_pred)
+	
+	# Weighted combination of losses
+	combined_loss = weight * (0.4 * dice_term + 0.4 * focal_loss + 0.2 * bce_loss)
+	
+	return combined_loss
 
 def single_dice_loss(y_true, y_pred):
     return 1.0 - dice_score(y_true, y_pred)
