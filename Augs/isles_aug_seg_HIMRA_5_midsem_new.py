@@ -467,8 +467,15 @@ def attention_gate(x, g, filters):
 
 
 def class_weighted_dice_loss(y_true, y_pred):
-    # Calculate lesion size
-    lesion_size = tf.reduce_sum(y_true, axis=[1, 2, 3])
+    # Get tensor shape and rank
+    y_true_shape = tf.shape(y_true)
+    rank = tf.rank(y_true)
+    
+    # Calculate lesion size - dynamically handle both 3D and 4D tensors
+    if rank == 4:  # If tensor is [batch, height, width, channels]
+        lesion_size = tf.reduce_sum(y_true, axis=[1, 2, 3])
+    else:  # If tensor is [batch, height, width]
+        lesion_size = tf.reduce_sum(y_true, axis=[1, 2])
     
     # Assign weights based on lesion size
     weights = tf.ones_like(lesion_size)
