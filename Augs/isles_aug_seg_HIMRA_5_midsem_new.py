@@ -61,7 +61,11 @@ def iou(y_true, y_pred):
 	return (intersection + 0.1) / (union - intersection + 0.1)
 
 def dice_loss(y_true, y_pred):
-	return tf.keras.losses.binary_crossentropy(y_true, y_pred) + (1 - dice_coeff(y_true, y_pred))
+	# Add class weighting
+	lesion_size = K.sum(y_true)
+	weight = tf.where(lesion_size < 50, 2.0, 1.0)  # Higher weight for small lesions
+	return weight * (tf.keras.losses.binary_crossentropy(y_true, y_pred) + 
+					(1 - dice_coeff(y_true, y_pred)))
 
 def single_dice_loss(y_true, y_pred):
     return 1.0 - dice_score(y_true, y_pred)
@@ -109,6 +113,10 @@ def grow_small_lesion(image, mask, target_size=45):
 	iterations = 0
 	grown_mask = mask.copy()
 	grown_image = image.copy()
+	
+	# Increase target size for C1 lesions
+	if np.sum(mask > 0) < 50:
+		target_size = 60  # Increase from 45 to 60
 	
 	while np.sum(grown_mask > 0) < target_size and iterations < 10:
 		kernel = np.ones((3,3), np.uint8)
@@ -230,6 +238,8 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
 		self.all_ids = list_IDs + self.aug_ids
 		self.shuffle = shuffle
 		self.on_epoch_end()
+		# Add class-aware sampling
+		self.class_weights = {1: 2.0, 2: 1.5, 3: 1.2, 4: 1.0, 5: 1.0}  # Higher weight for C1
 
 	def __len__(self):
 		return int(np.floor(len(self.all_ids) / self.batch_size))
@@ -298,47 +308,35 @@ def attention_gate(x, g, filters):
 
 def create_model():
 	inputs = Input((IMG_SIZE, IMG_SIZE, 1))
-
-	# Encoder with reduced filters
-	x = conv_block(inputs, 32)
+	x = conv_block(inputs, 64)  # Increase initial filters from 32 to 64
 	skip1 = x
 	x = MaxPooling2D()(x)
 
-	x = conv_block(x, 64)
+	x = conv_block(x, 128)
 	skip2 = x
 	x = MaxPooling2D()(x)
 
-	x = conv_block(x, 128)
+	x = conv_block(x, 256)
 	skip3 = x
 	x = MaxPooling2D()(x)
 
-	x = conv_block(x, 256)
-	skip4 = x
-	x = MaxPooling2D()(x)
-
-	# Bridge
 	x = conv_block(x, 512)
 
 	# Decoder with attention
 	x = Conv2DTranspose(256, 3, strides=2, padding='same')(x)
-	x = attention_gate(skip4, x, 256)
-	x = concatenate([x, skip4])
+	x = attention_gate(skip3, x, 256)
+	x = concatenate([x, skip3])
 	x = conv_block(x, 256)
 
 	x = Conv2DTranspose(128, 3, strides=2, padding='same')(x)
-	x = attention_gate(skip3, x, 128)
-	x = concatenate([x, skip3])
+	x = attention_gate(skip2, x, 128)
+	x = concatenate([x, skip2])
 	x = conv_block(x, 128)
 
 	x = Conv2DTranspose(64, 3, strides=2, padding='same')(x)
-	x = attention_gate(skip2, x, 64)
-	x = concatenate([x, skip2])
-	x = conv_block(x, 64)
-
-	x = Conv2DTranspose(32, 3, strides=2, padding='same')(x)
-	x = attention_gate(skip1, x, 32)
+	x = attention_gate(skip1, x, 64)
 	x = concatenate([x, skip1])
-	x = conv_block(x, 32)
+	x = conv_block(x, 64)
 
 	outputs = Conv2D(1, 1, activation='sigmoid')(x)
 
@@ -822,7 +820,7 @@ def grow_small_lesion(image, mask, target_size=45):
         dilated = dilated & brain_mask
         new_size = np.sum(dilated > 0)
         
-        if new_size > 12: # lesions with minimmal pixels
+        if new_size > 12: # lesions with minimal pixels
             break
             
         # Update both mask and image
@@ -1085,4 +1083,12 @@ for cls, score in class_wise_dice.items():
 # Visualize results
 save_path = visualize_class_wise_dice(class_wise_dice, OUTPUT_DIRECTORY)
 print(f"\nSaved class-wise Dice scores visualization to: {save_path}")
+
+
+def post_process_predictions(predictions):
+    # Add morphological operations to refine small lesions
+    predictions = (predictions > 0.5).astype(np.uint8)
+    kernel = np.ones((3,3), np.uint8)
+    predictions = cv2.morphologyEx(predictions, cv2.MORPH_CLOSE, kernel)
+    return predictions
 
