@@ -238,8 +238,6 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
 		self.all_ids = list_IDs + self.aug_ids
 		self.shuffle = shuffle
 		self.on_epoch_end()
-		# Add class-aware sampling
-		self.class_weights = {1: 2.0, 2: 1.5, 3: 1.2, 4: 1.0, 5: 1.0}  # Higher weight for C1
 
 	def __len__(self):
 		return int(np.floor(len(self.all_ids) / self.batch_size))
