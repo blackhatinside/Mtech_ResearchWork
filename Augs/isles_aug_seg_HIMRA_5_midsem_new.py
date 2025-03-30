@@ -466,6 +466,32 @@ def attention_gate(x, g, filters):
 # In[9]:
 
 
+def class_weighted_dice_loss(y_true, y_pred):
+    # Calculate lesion size
+    lesion_size = tf.reduce_sum(y_true, axis=[1, 2, 3])
+    
+    # Assign weights based on lesion size
+    weights = tf.ones_like(lesion_size)
+    
+    # Higher weights for smaller lesions (C1, C2)
+    weights = tf.where(lesion_size <= 50, 2.5, weights)  # C1
+    weights = tf.where((lesion_size > 50) & (lesion_size <= 100), 1.5, weights)  # C2
+    
+    # Higher weight for very large lesions (C5)
+    weights = tf.where(lesion_size > 200, 1.3, weights)  # C5
+    
+    # Calculate per-sample dice scores
+    y_true_f = tf.reshape(y_true, [-1, tf.reduce_prod(tf.shape(y_true)[1:])])
+    y_pred_f = tf.reshape(y_pred, [-1, tf.reduce_prod(tf.shape(y_pred)[1:])])
+    
+    intersection = tf.reduce_sum(y_true_f * y_pred_f, axis=1)
+    dice_scores = (2. * intersection + 1) / (tf.reduce_sum(y_true_f, axis=1) + tf.reduce_sum(y_pred_f, axis=1) + 1)
+    
+    # Apply weights to dice scores
+    weighted_dice = weights * (1 - dice_scores)
+    
+    return tf.reduce_mean(weighted_dice)
+
 def create_enhanced_model():
     inputs = Input((IMG_SIZE, IMG_SIZE, 1))
     
@@ -1201,39 +1227,6 @@ for cls, score in class_wise_dice.items():
 save_path = visualize_class_wise_dice(class_wise_dice, OUTPUT_DIRECTORY)
 print(f"\nSaved class-wise Dice scores visualization to: {save_path}")
 
-
-def class_weighted_dice_loss(y_true, y_pred):
-    # Calculate lesion size
-    lesion_size = tf.reduce_sum(y_true, axis=[1, 2, 3])
-    
-    # Assign weights based on lesion size
-    weights = tf.ones_like(lesion_size)
-    
-    # Higher weights for smaller lesions (C1, C2)
-    weights = tf.where(lesion_size <= 50, 2.5, weights)  # C1
-    weights = tf.where((lesion_size > 50) & (lesion_size <= 100), 1.5, weights)  # C2
-    
-    # Higher weight for very large lesions (C5)
-    weights = tf.where(lesion_size > 200, 1.3, weights)  # C5
-    
-    # Calculate per-sample dice scores
-    y_true_f = tf.reshape(y_true, [-1, tf.reduce_prod(tf.shape(y_true)[1:])])
-    y_pred_f = tf.reshape(y_pred, [-1, tf.reduce_prod(tf.shape(y_pred)[1:])])
-    
-    intersection = tf.reduce_sum(y_true_f * y_pred_f, axis=1)
-    dice_scores = (2. * intersection + 1) / (tf.reduce_sum(y_true_f, axis=1) + tf.reduce_sum(y_pred_f, axis=1) + 1)
-    
-    # Apply weights to dice scores
-    weighted_dice = weights * (1 - dice_scores)
-    
-    return tf.reduce_mean(weighted_dice)
-
-# Update model compilation
-model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNINGRATE),
-    loss=class_weighted_dice_loss,
-    metrics=['accuracy', dice_coeff, iou]
-)
 
 def apply_class_specific_postprocessing(image, prediction):
     """
