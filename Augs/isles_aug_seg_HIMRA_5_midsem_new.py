@@ -238,6 +238,8 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
 		self.all_ids = list_IDs + self.aug_ids
 		self.shuffle = shuffle
 		self.on_epoch_end()
+		# Add class-aware sampling
+		self.class_weights = {1: 2.0, 2: 1.5, 3: 1.2, 4: 1.0, 5: 1.0}  # Higher weight for C1
 
 	def __len__(self):
 		return int(np.floor(len(self.all_ids) / self.batch_size))
@@ -810,6 +812,10 @@ def grow_small_lesion(image, mask, target_size=45):
     iterations = 0
     grown_mask = mask.copy()
     grown_image = image.copy()
+    
+    # Increase target size for C1 lesions
+    if np.sum(mask > 0) < 50:
+        target_size = 60  # Increase from 45 to 60
     
     while np.sum(grown_mask > 0) < target_size and iterations < 10:
         kernel = np.ones((3,3), np.uint8)
