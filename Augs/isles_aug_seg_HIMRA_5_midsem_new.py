@@ -114,10 +114,6 @@ def grow_small_lesion(image, mask, target_size=45):
 	grown_mask = mask.copy()
 	grown_image = image.copy()
 	
-	# Increase target size for C1 lesions
-	if np.sum(mask > 0) < 50:
-		target_size = 60  # Increase from 45 to 60
-	
 	while np.sum(grown_mask > 0) < target_size and iterations < 10:
 		kernel = np.ones((3,3), np.uint8)
 		dilated = ndimage.binary_dilation(grown_mask, kernel)
@@ -308,35 +304,47 @@ def attention_gate(x, g, filters):
 
 def create_model():
 	inputs = Input((IMG_SIZE, IMG_SIZE, 1))
-	x = conv_block(inputs, 64)  # Increase initial filters from 32 to 64
+
+	# Encoder with reduced filters
+	x = conv_block(inputs, 32)
 	skip1 = x
 	x = MaxPooling2D()(x)
 
-	x = conv_block(x, 128)
+	x = conv_block(x, 64)
 	skip2 = x
 	x = MaxPooling2D()(x)
 
-	x = conv_block(x, 256)
+	x = conv_block(x, 128)
 	skip3 = x
 	x = MaxPooling2D()(x)
 
+	x = conv_block(x, 256)
+	skip4 = x
+	x = MaxPooling2D()(x)
+
+	# Bridge
 	x = conv_block(x, 512)
 
 	# Decoder with attention
 	x = Conv2DTranspose(256, 3, strides=2, padding='same')(x)
-	x = attention_gate(skip3, x, 256)
-	x = concatenate([x, skip3])
+	x = attention_gate(skip4, x, 256)
+	x = concatenate([x, skip4])
 	x = conv_block(x, 256)
 
 	x = Conv2DTranspose(128, 3, strides=2, padding='same')(x)
-	x = attention_gate(skip2, x, 128)
-	x = concatenate([x, skip2])
+	x = attention_gate(skip3, x, 128)
+	x = concatenate([x, skip3])
 	x = conv_block(x, 128)
 
 	x = Conv2DTranspose(64, 3, strides=2, padding='same')(x)
-	x = attention_gate(skip1, x, 64)
-	x = concatenate([x, skip1])
+	x = attention_gate(skip2, x, 64)
+	x = concatenate([x, skip2])
 	x = conv_block(x, 64)
+
+	x = Conv2DTranspose(32, 3, strides=2, padding='same')(x)
+	x = attention_gate(skip1, x, 32)
+	x = concatenate([x, skip1])
+	x = conv_block(x, 32)
 
 	outputs = Conv2D(1, 1, activation='sigmoid')(x)
 
@@ -813,10 +821,6 @@ def grow_small_lesion(image, mask, target_size=45):
     grown_mask = mask.copy()
     grown_image = image.copy()
     
-    # Increase target size for C1 lesions
-    if np.sum(mask > 0) < 50:
-        target_size = 60  # Increase from 45 to 60
-    
     while np.sum(grown_mask > 0) < target_size and iterations < 10:
         kernel = np.ones((3,3), np.uint8)
         dilated = ndimage.binary_dilation(grown_mask, kernel)
@@ -1087,12 +1091,4 @@ for cls, score in class_wise_dice.items():
 # Visualize results
 save_path = visualize_class_wise_dice(class_wise_dice, OUTPUT_DIRECTORY)
 print(f"\nSaved class-wise Dice scores visualization to: {save_path}")
-
-
-def post_process_predictions(predictions):
-    # Add morphological operations to refine small lesions
-    predictions = (predictions > 0.5).astype(np.uint8)
-    kernel = np.ones((3,3), np.uint8)
-    predictions = cv2.morphologyEx(predictions, cv2.MORPH_CLOSE, kernel)
-    return predictions
 
