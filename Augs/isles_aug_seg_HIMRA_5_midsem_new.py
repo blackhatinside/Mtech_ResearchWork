@@ -86,13 +86,9 @@ def dice_loss(y_true, y_pred):
 	lesion_size = K.sum(y_true)
 	
 	# Class-specific weighting
-	weight = tf.where(
-		lesion_size < 50, 3.0,  # Higher weight for C1
-		tf.where(
-			lesion_size < 100, 1.5,  # Medium weight for C2
-			1.0  # Normal weight for others
-		)
-	)
+	weight = tf.where(lesion_size < 50, 1.0, 1.0)  # Higher weight for small lesions
+	return weight * (tf.keras.losses.binary_crossentropy(y_true, y_pred) + 
+					(1 - dice_coeff(y_true, y_pred)))
 	
 	# Combine multiple loss functions
 	dice_term = 1 - dice_coeff(y_true, y_pred)
