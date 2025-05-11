@@ -63,7 +63,7 @@ def iou(y_true, y_pred):
 # Loss Functions
 # ```
 def single_dice_loss(y_true, y_pred):
-    return 1.0 - dice_coeff(y_true, y_pred)
+    return 1.0 - dice_score(y_true, y_pred)
 
 def binary_crossentropy_loss(y_true, y_pred):
     return tf.keras.losses.BinaryCrossentropy()(y_true, y_pred)
@@ -236,89 +236,89 @@ def attention_occlusion(image, mask):
 	
 	return modulated_image, mask
 
-# Additional traditional augmentation techniques
-def random_rotation(image, mask, max_angle=15):
-    """Apply random rotation to image and mask"""
-    angle = np.random.uniform(-max_angle, max_angle)
-    # Get center of the image (where the brain is likely centered)
-    center = (image.shape[0] // 2, image.shape[1] // 2)
+# # Additional traditional augmentation techniques
+# def random_rotation(image, mask, max_angle=15):
+#     """Apply random rotation to image and mask"""
+#     angle = np.random.uniform(-max_angle, max_angle)
+#     # Get center of the image (where the brain is likely centered)
+#     center = (image.shape[0] // 2, image.shape[1] // 2)
     
-    # Create rotation matrix
-    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+#     # Create rotation matrix
+#     M = cv2.getRotationMatrix2D(center, angle, 1.0)
     
-    # Apply rotation to image and mask
-    rotated_img = cv2.warpAffine(image, M, image.shape, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=-1)
-    rotated_mask = cv2.warpAffine(mask, M, mask.shape, flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+#     # Apply rotation to image and mask
+#     rotated_img = cv2.warpAffine(image, M, image.shape, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=-1)
+#     rotated_mask = cv2.warpAffine(mask, M, mask.shape, flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
     
-    return rotated_img, rotated_mask
+#     return rotated_img, rotated_mask
 
-def random_brightness_contrast(image, mask, brightness_range=(-0.2, 0.2), contrast_range=(0.8, 1.2)):
-    """Apply random brightness and contrast adjustments"""
-    # Only modify brain region
-    brain_mask = (image != -1)
+# def random_brightness_contrast(image, mask, brightness_range=(-0.2, 0.2), contrast_range=(0.8, 1.2)):
+#     """Apply random brightness and contrast adjustments"""
+#     # Only modify brain region
+#     brain_mask = (image != -1)
     
-    # Apply brightness adjustment
-    brightness = np.random.uniform(brightness_range[0], brightness_range[1])
-    adjusted_img = image.copy()
-    adjusted_img[brain_mask] = image[brain_mask] + brightness
+#     # Apply brightness adjustment
+#     brightness = np.random.uniform(brightness_range[0], brightness_range[1])
+#     adjusted_img = image.copy()
+#     adjusted_img[brain_mask] = image[brain_mask] + brightness
     
-    # Apply contrast adjustment
-    contrast = np.random.uniform(contrast_range[0], contrast_range[1])
-    adjusted_img[brain_mask] = ((adjusted_img[brain_mask] - np.mean(adjusted_img[brain_mask])) * contrast) + np.mean(adjusted_img[brain_mask])
+#     # Apply contrast adjustment
+#     contrast = np.random.uniform(contrast_range[0], contrast_range[1])
+#     adjusted_img[brain_mask] = ((adjusted_img[brain_mask] - np.mean(adjusted_img[brain_mask])) * contrast) + np.mean(adjusted_img[brain_mask])
     
-    # Clip values to valid range
-    adjusted_img = np.clip(adjusted_img, -1, 1)
+#     # Clip values to valid range
+#     adjusted_img = np.clip(adjusted_img, -1, 1)
     
-    # Keep background unchanged
-    adjusted_img[~brain_mask] = -1
+#     # Keep background unchanged
+#     adjusted_img[~brain_mask] = -1
     
-    return adjusted_img, mask
+#     return adjusted_img, mask
 
-def random_noise(image, mask, noise_level=0.05):
-    """Add random Gaussian noise to the image"""
-    brain_mask = (image != -1)
+# def random_noise(image, mask, noise_level=0.05):
+#     """Add random Gaussian noise to the image"""
+#     brain_mask = (image != -1)
     
-    # Add Gaussian noise only to brain region
-    noisy_img = image.copy()
-    noise = np.random.normal(0, noise_level, image.shape)
-    noisy_img[brain_mask] = image[brain_mask] + noise[brain_mask]
+#     # Add Gaussian noise only to brain region
+#     noisy_img = image.copy()
+#     noise = np.random.normal(0, noise_level, image.shape)
+#     noisy_img[brain_mask] = image[brain_mask] + noise[brain_mask]
     
-    # Clip values to valid range
-    noisy_img = np.clip(noisy_img, -1, 1)
+#     # Clip values to valid range
+#     noisy_img = np.clip(noisy_img, -1, 1)
     
-    # Keep background unchanged
-    noisy_img[~brain_mask] = -1
+#     # Keep background unchanged
+#     noisy_img[~brain_mask] = -1
     
-    return noisy_img, mask
+#     return noisy_img, mask
 
-def random_flip(image, mask):
-    """Randomly flip image horizontally"""
-    if np.random.random() > 0.5:
-        return np.fliplr(image), np.fliplr(mask)
-    return image, mask
+# def random_flip(image, mask):
+#     """Randomly flip image horizontally"""
+#     if np.random.random() > 0.5:
+#         return np.fliplr(image), np.fliplr(mask)
+#     return image, mask
 
-def elastic_transform(image, mask, alpha=50, sigma=5):
-    """Apply elastic transform to both image and mask"""
-    brain_mask = (image != -1)
+# def elastic_transform(image, mask, alpha=50, sigma=5):
+#     """Apply elastic transform to both image and mask"""
+#     brain_mask = (image != -1)
     
-    # Generate random displacement fields
-    dx = gaussian_filter((np.random.rand(*image.shape) * 2 - 1), sigma) * alpha
-    dy = gaussian_filter((np.random.rand(*image.shape) * 2 - 1), sigma) * alpha
+#     # Generate random displacement fields
+#     dx = gaussian_filter((np.random.rand(*image.shape) * 2 - 1), sigma) * alpha
+#     dy = gaussian_filter((np.random.rand(*image.shape) * 2 - 1), sigma) * alpha
     
-    # Create meshgrid
-    y, x = np.meshgrid(np.arange(image.shape[0]), np.arange(image.shape[1]), indexing='ij')
+#     # Create meshgrid
+#     y, x = np.meshgrid(np.arange(image.shape[0]), np.arange(image.shape[1]), indexing='ij')
     
-    # Apply deformation
-    indices = np.reshape(y + dy, (-1, 1)), np.reshape(x + dx, (-1, 1))
+#     # Apply deformation
+#     indices = np.reshape(y + dy, (-1, 1)), np.reshape(x + dx, (-1, 1))
     
-    # Interpolate image
-    transformed_img = map_coordinates(image, indices, order=1).reshape(image.shape)
-    transformed_mask = map_coordinates(mask, indices, order=0).reshape(mask.shape)
+#     # Interpolate image
+#     transformed_img = map_coordinates(image, indices, order=1).reshape(image.shape)
+#     transformed_mask = map_coordinates(mask, indices, order=0).reshape(mask.shape)
     
-    # Preserve background
-    transformed_img[~brain_mask] = -1
+#     # Preserve background
+#     transformed_img[~brain_mask] = -1
     
-    return transformed_img, transformed_mask
+#     return transformed_img, transformed_mask
 
 
 # In[7]:
@@ -369,36 +369,42 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
 				lesion_size = np.sum(mask)
 				lesion_class = 1 if lesion_size < 50 else 2 if lesion_size < 100 else 3 if lesion_size < 150 else 4 if lesion_size < 200 else 5
 
-				# Apply HIMRA and traditional augmentations
-				if is_aug or np.random.random() < 0.7:  # Apply augmentation to 70% of training samples
-					# Apply traditional augmentations
-					if np.random.random() < 0.5:
-						img, mask = random_flip(img, mask)
+				# HIMRA Augmentation
+				if is_aug:
+					img, mask = biomechanical_deformation(img, mask, lesion_class)
+					img, mask = simulate_hemodynamics(img, mask, lesion_class)
+					# img, mask = attention_occlusion(img, mask)
+
+				# # Apply HIMRA and traditional augmentations
+				# if is_aug or np.random.random() < 0.7:  # Apply augmentation to 70% of training samples
+				# 	# Apply traditional augmentations
+				# 	if np.random.random() < 0.5:
+				# 		img, mask = random_flip(img, mask)
 					
-					if np.random.random() < 0.7:
-						img, mask = random_rotation(img, mask, max_angle=10 if lesion_class <= 2 else 20)
+				# 	if np.random.random() < 0.7:
+				# 		img, mask = random_rotation(img, mask, max_angle=10 if lesion_class <= 2 else 20)
 					
-					if np.random.random() < 0.5:
-						img, mask = random_brightness_contrast(img, mask)
+				# 	if np.random.random() < 0.5:
+				# 		img, mask = random_brightness_contrast(img, mask)
 					
-					if np.random.random() < 0.3:
-						img, mask = random_noise(img, mask, noise_level=0.03)
+				# 	if np.random.random() < 0.3:
+				# 		img, mask = random_noise(img, mask, noise_level=0.03)
 						
-					if np.random.random() < 0.5:
-						img, mask = elastic_transform(img, mask, alpha=30 if lesion_class <= 2 else 60)
+				# 	if np.random.random() < 0.5:
+				# 		img, mask = elastic_transform(img, mask, alpha=30 if lesion_class <= 2 else 60)
 				
-					# Apply HIMRA augmentations with adjusted probabilities based on lesion class
-					# Use more aggressive augmentation for smaller lesions (class 1 and 2)
-					if lesion_class <= 2 and np.random.random() < 0.9:
-						img, mask = biomechanical_deformation(img, mask, lesion_class)
-					elif lesion_class > 2 and np.random.random() < 0.6:
-						img, mask = biomechanical_deformation(img, mask, lesion_class)
+				# 	# Apply HIMRA augmentations with adjusted probabilities based on lesion class
+				# 	# Use more aggressive augmentation for smaller lesions (class 1 and 2)
+				# 	if lesion_class <= 2 and np.random.random() < 0.9:
+				# 		img, mask = biomechanical_deformation(img, mask, lesion_class)
+				# 	elif lesion_class > 2 and np.random.random() < 0.6:
+				# 		img, mask = biomechanical_deformation(img, mask, lesion_class)
 						
-					if np.random.random() < 0.8:
-						img, mask = simulate_hemodynamics(img, mask, lesion_class)
+				# 	if np.random.random() < 0.8:
+				# 		img, mask = simulate_hemodynamics(img, mask, lesion_class)
 						
-					if np.random.random() < 0.5:
-						img, mask = attention_occlusion(img, mask)
+				# 	if np.random.random() < 0.5:
+				# 		img, mask = attention_occlusion(img, mask)
 
 				X.append(img)
 				y.append(mask)
