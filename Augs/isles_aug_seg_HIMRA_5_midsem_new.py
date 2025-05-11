@@ -71,7 +71,7 @@ def dice_score(y_true, y_pred, smooth=1e-5):
 # Loss Functions
 # ```
 def single_dice_loss(y_true, y_pred):
-    return 1.0 - dice_score(y_true, y_pred)
+    return 1.0 - dice_coeff(y_true, y_pred)
 
 def binary_crossentropy_loss(y_true, y_pred):
     return tf.keras.losses.BinaryCrossentropy()(y_true, y_pred)
