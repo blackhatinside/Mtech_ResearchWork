@@ -60,13 +60,13 @@ def iou(y_true, y_pred):
 	union = K.sum(y_true + y_pred)
 	return (intersection + 0.1) / (union - intersection + 0.1)
 
-def dice_score(y_true, y_pred, smooth=1e-5):
-    y_true_f = K.flatten(y_true)
-    y_pred_f = K.flatten(y_pred)
-    intersection = K.sum(y_true_f * y_pred_f)
-    union = K.sum(y_true_f) + K.sum(y_pred_f)
-    dice = (2.0 * intersection + smooth) / (union + smooth)
-    return dice
+# def dice_score(y_true, y_pred, smooth=1e-5):
+#     y_true_f = K.flatten(y_true)
+#     y_pred_f = K.flatten(y_pred)
+#     intersection = K.sum(y_true_f * y_pred_f)
+#     union = K.sum(y_true_f) + K.sum(y_pred_f)
+#     dice = (2.0 * intersection + smooth) / (union + smooth)
+#     return dice
 
 # Loss Functions
 # ```
@@ -94,8 +94,8 @@ def dice_loss(y_true, y_pred):
 	lesion_size = K.sum(y_true)
 	
 	# Class-specific weighting with More aggressive weighting for small lesions
-	weight = tf.where(lesion_size < 50, 2.0, 
-					  tf.where(lesion_size < 100, 1.5, 1.0))
+	# weight = tf.where(lesion_size < 50, 2.0, tf.where(lesion_size < 100, 1.5, 1.0))
+	weight = tf.where(lesion_size < 50, 2.0, 1.0)
 	
 	# Combine loss components with better weights
 	dice_loss = single_dice_loss(y_true, y_pred)
