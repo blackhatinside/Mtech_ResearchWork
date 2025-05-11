@@ -417,8 +417,8 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
 				X.append(img)
 				y.append(mask)
 
-		# return np.expand_dims(np.array(X), -1), np.expand_dims(np.array(y), -1)   # 4D mask
-		return np.array(X), np.array(y)     # 3D mask
+		return np.expand_dims(np.array(X), -1), np.expand_dims(np.array(y), -1)   # 4D mask
+		# return np.array(X), np.array(y)     # 3D mask
 
 
 # In[8]:
