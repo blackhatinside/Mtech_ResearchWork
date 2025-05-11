@@ -1176,7 +1176,14 @@ def calculate_class_wise_dice(model, test_gen):
             class_dice_scores[class_name].append(dice)
     
     # Calculate mean Dice scores for each class
-    mean_dice_scores = {cls: np.mean(scores) if scores else 0 for cls, scores in class_dice_scores.items()}
+    mean_dice_scores = {}
+    for cls, scores in class_dice_scores.items():
+        if len(scores) > 0:
+            mean_dice_scores[cls] = np.mean(scores)
+        else:
+            # Handle empty class by setting mean to 0 or None
+            mean_dice_scores[cls] = 0  # or None if you prefer
+            print(f"Warning: No samples found for class {cls}")
     
     return mean_dice_scores
 
@@ -1187,7 +1194,7 @@ def visualize_class_wise_dice(scores, output_dir):
     
     # Create bar plot
     plt.figure(figsize=(10, 6))
-    plt.bar(classes, values, color='skyblue')
+    bars = plt.bar(classes, values, color='skyblue')
     plt.xlabel('Lesion Size Class')
     plt.ylabel('Mean Dice Score')
     plt.title('Class-wise Dice Scores')
@@ -1195,7 +1202,25 @@ def visualize_class_wise_dice(scores, output_dir):
     
     # Add value labels
     for i, v in enumerate(values):
-        plt.text(i, v + 0.02, f"{v:.3f}", ha='center')
+        if np.isnan(v):
+            label_text = "N/A"
+            plt.text(i, 0.05, label_text, ha='center')
+            # Set the bar height to 0 for NaN values
+            bars[i].set_height(0)
+        else:
+            label_text = f"{v:.3f}"
+            plt.text(i, v + 0.02, label_text, ha='center')
+    
+    # Add class definitions note
+    class_info = (
+        "Class definitions:\n"
+        "C1: lesion size < 50 pixels\n"
+        "C2: 50 ≤ lesion size < 100 pixels\n" 
+        "C3: 100 ≤ lesion size < 150 pixels\n"
+        "C4: 150 ≤ lesion size < 200 pixels\n"
+        "C5: lesion size ≥ 200 pixels"
+    )
+    plt.figtext(0.15, 0.01, class_info, wrap=True, fontsize=8)
     
     # Save and show plot
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
