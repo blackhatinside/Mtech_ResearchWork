@@ -542,7 +542,7 @@ def create_model():     # UNet
 
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNINGRATE),
-        loss=dice_loss,
+        loss=hybrid_loss,
         metrics=['accuracy', dice_coeff, iou]
     )
 
