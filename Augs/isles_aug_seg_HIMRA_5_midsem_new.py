@@ -244,89 +244,6 @@ def attention_occlusion(image, mask):
 	
 	return modulated_image, mask
 
-# # Additional traditional augmentation techniques
-# def random_rotation(image, mask, max_angle=15):
-#     """Apply random rotation to image and mask"""
-#     angle = np.random.uniform(-max_angle, max_angle)
-#     # Get center of the image (where the brain is likely centered)
-#     center = (image.shape[0] // 2, image.shape[1] // 2)
-    
-#     # Create rotation matrix
-#     M = cv2.getRotationMatrix2D(center, angle, 1.0)
-    
-#     # Apply rotation to image and mask
-#     rotated_img = cv2.warpAffine(image, M, image.shape, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=-1)
-#     rotated_mask = cv2.warpAffine(mask, M, mask.shape, flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=0)
-    
-#     return rotated_img, rotated_mask
-
-# def random_brightness_contrast(image, mask, brightness_range=(-0.2, 0.2), contrast_range=(0.8, 1.2)):
-#     """Apply random brightness and contrast adjustments"""
-#     # Only modify brain region
-#     brain_mask = (image != -1)
-    
-#     # Apply brightness adjustment
-#     brightness = np.random.uniform(brightness_range[0], brightness_range[1])
-#     adjusted_img = image.copy()
-#     adjusted_img[brain_mask] = image[brain_mask] + brightness
-    
-#     # Apply contrast adjustment
-#     contrast = np.random.uniform(contrast_range[0], contrast_range[1])
-#     adjusted_img[brain_mask] = ((adjusted_img[brain_mask] - np.mean(adjusted_img[brain_mask])) * contrast) + np.mean(adjusted_img[brain_mask])
-    
-#     # Clip values to valid range
-#     adjusted_img = np.clip(adjusted_img, -1, 1)
-    
-#     # Keep background unchanged
-#     adjusted_img[~brain_mask] = -1
-    
-#     return adjusted_img, mask
-
-# def random_noise(image, mask, noise_level=0.05):
-#     """Add random Gaussian noise to the image"""
-#     brain_mask = (image != -1)
-    
-#     # Add Gaussian noise only to brain region
-#     noisy_img = image.copy()
-#     noise = np.random.normal(0, noise_level, image.shape)
-#     noisy_img[brain_mask] = image[brain_mask] + noise[brain_mask]
-    
-#     # Clip values to valid range
-#     noisy_img = np.clip(noisy_img, -1, 1)
-    
-#     # Keep background unchanged
-#     noisy_img[~brain_mask] = -1
-    
-#     return noisy_img, mask
-
-# def random_flip(image, mask):
-#     """Randomly flip image horizontally"""
-#     if np.random.random() > 0.5:
-#         return np.fliplr(image), np.fliplr(mask)
-#     return image, mask
-
-# def elastic_transform(image, mask, alpha=50, sigma=5):
-#     """Apply elastic transform to both image and mask"""
-#     brain_mask = (image != -1)
-    
-#     # Generate random displacement fields
-#     dx = gaussian_filter((np.random.rand(*image.shape) * 2 - 1), sigma) * alpha
-#     dy = gaussian_filter((np.random.rand(*image.shape) * 2 - 1), sigma) * alpha
-    
-#     # Create meshgrid
-#     y, x = np.meshgrid(np.arange(image.shape[0]), np.arange(image.shape[1]), indexing='ij')
-    
-#     # Apply deformation
-#     indices = np.reshape(y + dy, (-1, 1)), np.reshape(x + dx, (-1, 1))
-    
-#     # Interpolate image
-#     transformed_img = map_coordinates(image, indices, order=1).reshape(image.shape)
-#     transformed_mask = map_coordinates(mask, indices, order=0).reshape(mask.shape)
-    
-#     # Preserve background
-#     transformed_img[~brain_mask] = -1
-    
-#     return transformed_img, transformed_mask
 
 
 # In[7]:
@@ -339,7 +256,7 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
 		self.aug_ids = aug_ids if aug_ids is not None else []
 		self.all_ids = list_IDs + self.aug_ids
 		self.shuffle = shuffle
-		self.on_epoch_end()
+		self.__on_epoch_end()
 		# Add class-aware sampling
 		self.class_weights = {1: 2.0, 2: 1.5, 3: 1.2, 4: 1.0, 5: 1.0}  # Higher weight for C1
 
@@ -351,7 +268,7 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
 		batch_ids = [self.all_ids[k] for k in indexes]
 		return self.__data_generation(batch_ids)
 
-	def on_epoch_end(self):
+	def __on_epoch_end(self):
 		self.indexes = np.arange(len(self.all_ids))
 		if self.shuffle:
 			np.random.shuffle(self.indexes)
@@ -383,42 +300,31 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
 					img, mask = simulate_hemodynamics(img, mask, lesion_class)
 					# img, mask = attention_occlusion(img, mask)
 
-				# # Apply HIMRA and traditional augmentations
-				# if is_aug or np.random.random() < 0.7:  # Apply augmentation to 70% of training samples
-				# 	# Apply traditional augmentations
-				# 	if np.random.random() < 0.5:
-				# 		img, mask = random_flip(img, mask)
-					
-				# 	if np.random.random() < 0.7:
-				# 		img, mask = random_rotation(img, mask, max_angle=10 if lesion_class <= 2 else 20)
-					
-				# 	if np.random.random() < 0.5:
-				# 		img, mask = random_brightness_contrast(img, mask)
-					
-				# 	if np.random.random() < 0.3:
-				# 		img, mask = random_noise(img, mask, noise_level=0.03)
-						
-				# 	if np.random.random() < 0.5:
-				# 		img, mask = elastic_transform(img, mask, alpha=30 if lesion_class <= 2 else 60)
-				
-				# 	# Apply HIMRA augmentations with adjusted probabilities based on lesion class
-				# 	# Use more aggressive augmentation for smaller lesions (class 1 and 2)
-				# 	if lesion_class <= 2 and np.random.random() < 0.9:
-				# 		img, mask = biomechanical_deformation(img, mask, lesion_class)
-				# 	elif lesion_class > 2 and np.random.random() < 0.6:
-				# 		img, mask = biomechanical_deformation(img, mask, lesion_class)
-						
-				# 	if np.random.random() < 0.8:
-				# 		img, mask = simulate_hemodynamics(img, mask, lesion_class)
-						
-				# 	if np.random.random() < 0.5:
-				# 		img, mask = attention_occlusion(img, mask)
+					# Save augmented images and masks
+					self.__save_augmented_data(img, mask, f)
 
 				X.append(img)
 				y.append(mask)
 
 		return np.expand_dims(np.array(X), -1), np.expand_dims(np.array(y), -1)   # 4D mask
 		# return np.array(X), np.array(y)     # 3D mask
+
+	def __save_augmented_data(image, mask, filename):
+		# Define directories for saving
+		augmented_image_dir = "augmented_images"
+		augmented_mask_dir = "augmented_masks"
+
+		# Create directories if they don't exist
+		os.makedirs(augmented_image_dir, exist_ok=True)
+		os.makedirs(augmented_mask_dir, exist_ok=True)
+
+		# Save image and mask with consistent naming
+		image_filename = os.path.join(augmented_image_dir, filename)
+		mask_filename = os.path.join(augmented_mask_dir, filename.replace('slice', 'mask'))
+
+		# Save the image and mask
+		cv2.imwrite(image_filename, image * 255)  # Scale image back to 0-255 for saving
+		cv2.imwrite(mask_filename, mask * 255)    # Scale mask back to 0-255 for saving
 
 
 # In[8]:
@@ -440,113 +346,61 @@ def attention_gate(x, g, filters):
 # In[9]:
 
 
-# def create_model():   # Attention UNet
-# 	inputs = Input((IMG_SIZE, IMG_SIZE, 1))
+def create_model():   # Attention UNet (better than UNet)
+	inputs = Input((IMG_SIZE, IMG_SIZE, 1))
 
-# 	# Encoder with reduced filters
-# 	x = conv_block(inputs, 32)
-# 	skip1 = x
-# 	x = MaxPooling2D()(x)
+	# Encoder with reduced filters
+	x = conv_block(inputs, 32)
+	skip1 = x
+	x = MaxPooling2D()(x)
 
-# 	x = conv_block(x, 64)
-# 	skip2 = x
-# 	x = MaxPooling2D()(x)
+	x = conv_block(x, 64)
+	skip2 = x
+	x = MaxPooling2D()(x)
 
-# 	x = conv_block(x, 128)
-# 	skip3 = x
-# 	x = MaxPooling2D()(x)
+	x = conv_block(x, 128)
+	skip3 = x
+	x = MaxPooling2D()(x)
 
-# 	x = conv_block(x, 256)
-# 	skip4 = x
-# 	x = MaxPooling2D()(x)
+	x = conv_block(x, 256)
+	skip4 = x
+	x = MaxPooling2D()(x)
 
-# 	# Bridge
-# 	x = conv_block(x, 512)
+	# Bridge
+	x = conv_block(x, 512)
 
-# 	# Decoder with attention
-# 	x = Conv2DTranspose(256, 3, strides=2, padding='same')(x)
-# 	x = attention_gate(skip4, x, 256)
-# 	x = concatenate([x, skip4])
-# 	x = conv_block(x, 256)
+	# Decoder with attention
+	x = Conv2DTranspose(256, 3, strides=2, padding='same')(x)
+	x = attention_gate(skip4, x, 256)
+	x = concatenate([x, skip4])
+	x = conv_block(x, 256)
 
-# 	x = Conv2DTranspose(128, 3, strides=2, padding='same')(x)
-# 	x = attention_gate(skip3, x, 128)
-# 	x = concatenate([x, skip3])
-# 	x = conv_block(x, 128)
+	x = Conv2DTranspose(128, 3, strides=2, padding='same')(x)
+	x = attention_gate(skip3, x, 128)
+	x = concatenate([x, skip3])
+	x = conv_block(x, 128)
 
-# 	x = Conv2DTranspose(64, 3, strides=2, padding='same')(x)
-# 	x = attention_gate(skip2, x, 64)
-# 	x = concatenate([x, skip2])
-# 	x = conv_block(x, 64)
+	x = Conv2DTranspose(64, 3, strides=2, padding='same')(x)
+	x = attention_gate(skip2, x, 64)
+	x = concatenate([x, skip2])
+	x = conv_block(x, 64)
 
-# 	x = Conv2DTranspose(32, 3, strides=2, padding='same')(x)
-# 	x = attention_gate(skip1, x, 32)
-# 	x = concatenate([x, skip1])
-# 	x = conv_block(x, 32)
+	x = Conv2DTranspose(32, 3, strides=2, padding='same')(x)
+	x = attention_gate(skip1, x, 32)
+	x = concatenate([x, skip1])
+	x = conv_block(x, 32)
 
-# 	outputs = Conv2D(1, 1, activation='sigmoid')(x)
+	outputs = Conv2D(1, 1, activation='sigmoid')(x)
 
-# 	model = Model(inputs, outputs)
+	model = Model(inputs, outputs)
 
-# 	model.compile(
-# 		optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNINGRATE),
-# 		loss=hybrid_loss,
-# 		metrics=['accuracy', dice_coeff, iou]
-# 	)
+	model.compile(
+		optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNINGRATE),
+		loss=hybrid_loss,
+		metrics=['accuracy', dice_coeff, iou]
+	)
 
-# 	return model
-
-def create_model():     # UNet
-    inputs = Input((IMG_SIZE, IMG_SIZE, 1))
-
-    # Encoder
-    x = conv_block(inputs, 32)
-    skip1 = x
-    x = MaxPooling2D()(x)
-
-    x = conv_block(x, 64)
-    skip2 = x
-    x = MaxPooling2D()(x)
-
-    x = conv_block(x, 128)
-    skip3 = x
-    x = MaxPooling2D()(x)
-
-    x = conv_block(x, 256)
-    skip4 = x
-    x = MaxPooling2D()(x)
-
-    # Bridge
-    x = conv_block(x, 512)
-
-    # Decoder (without attention gates)
-    x = Conv2DTranspose(256, 3, strides=2, padding='same')(x)
-    x = concatenate([x, skip4])
-    x = conv_block(x, 256)
-
-    x = Conv2DTranspose(128, 3, strides=2, padding='same')(x)
-    x = concatenate([x, skip3])
-    x = conv_block(x, 128)
-
-    x = Conv2DTranspose(64, 3, strides=2, padding='same')(x)
-    x = concatenate([x, skip2])
-    x = conv_block(x, 64)
-
-    x = Conv2DTranspose(32, 3, strides=2, padding='same')(x)
-    x = concatenate([x, skip1])
-    x = conv_block(x, 32)
-
-    outputs = Conv2D(1, 1, activation='sigmoid')(x)
-
-    model = Model(inputs, outputs)
-
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNINGRATE),
-        loss=hybrid_loss,
-        metrics=['accuracy', dice_coeff, iou]
-    )
-
-    return model
+	return model
 
 
 # In[10]:
