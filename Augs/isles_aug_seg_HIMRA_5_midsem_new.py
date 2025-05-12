@@ -89,7 +89,7 @@ def binary_focal_loss(gamma=2., alpha=0.25):
     return focal_loss
 # ```
 
-def dice_loss(y_true, y_pred):
+def hybrid_loss(y_true, y_pred):
 	# Get lesion size for class weighting
 	lesion_size = K.sum(y_true)
 	
@@ -440,61 +440,113 @@ def attention_gate(x, g, filters):
 # In[9]:
 
 
-def create_model():
-	inputs = Input((IMG_SIZE, IMG_SIZE, 1))
+# def create_model():   # Attention UNet
+# 	inputs = Input((IMG_SIZE, IMG_SIZE, 1))
 
-	# Encoder with reduced filters
-	x = conv_block(inputs, 32)
-	skip1 = x
-	x = MaxPooling2D()(x)
+# 	# Encoder with reduced filters
+# 	x = conv_block(inputs, 32)
+# 	skip1 = x
+# 	x = MaxPooling2D()(x)
 
-	x = conv_block(x, 64)
-	skip2 = x
-	x = MaxPooling2D()(x)
+# 	x = conv_block(x, 64)
+# 	skip2 = x
+# 	x = MaxPooling2D()(x)
 
-	x = conv_block(x, 128)
-	skip3 = x
-	x = MaxPooling2D()(x)
+# 	x = conv_block(x, 128)
+# 	skip3 = x
+# 	x = MaxPooling2D()(x)
 
-	x = conv_block(x, 256)
-	skip4 = x
-	x = MaxPooling2D()(x)
+# 	x = conv_block(x, 256)
+# 	skip4 = x
+# 	x = MaxPooling2D()(x)
 
-	# Bridge
-	x = conv_block(x, 512)
+# 	# Bridge
+# 	x = conv_block(x, 512)
 
-	# Decoder with attention
-	x = Conv2DTranspose(256, 3, strides=2, padding='same')(x)
-	x = attention_gate(skip4, x, 256)
-	x = concatenate([x, skip4])
-	x = conv_block(x, 256)
+# 	# Decoder with attention
+# 	x = Conv2DTranspose(256, 3, strides=2, padding='same')(x)
+# 	x = attention_gate(skip4, x, 256)
+# 	x = concatenate([x, skip4])
+# 	x = conv_block(x, 256)
 
-	x = Conv2DTranspose(128, 3, strides=2, padding='same')(x)
-	x = attention_gate(skip3, x, 128)
-	x = concatenate([x, skip3])
-	x = conv_block(x, 128)
+# 	x = Conv2DTranspose(128, 3, strides=2, padding='same')(x)
+# 	x = attention_gate(skip3, x, 128)
+# 	x = concatenate([x, skip3])
+# 	x = conv_block(x, 128)
 
-	x = Conv2DTranspose(64, 3, strides=2, padding='same')(x)
-	x = attention_gate(skip2, x, 64)
-	x = concatenate([x, skip2])
-	x = conv_block(x, 64)
+# 	x = Conv2DTranspose(64, 3, strides=2, padding='same')(x)
+# 	x = attention_gate(skip2, x, 64)
+# 	x = concatenate([x, skip2])
+# 	x = conv_block(x, 64)
 
-	x = Conv2DTranspose(32, 3, strides=2, padding='same')(x)
-	x = attention_gate(skip1, x, 32)
-	x = concatenate([x, skip1])
-	x = conv_block(x, 32)
+# 	x = Conv2DTranspose(32, 3, strides=2, padding='same')(x)
+# 	x = attention_gate(skip1, x, 32)
+# 	x = concatenate([x, skip1])
+# 	x = conv_block(x, 32)
 
-	outputs = Conv2D(1, 1, activation='sigmoid')(x)
+# 	outputs = Conv2D(1, 1, activation='sigmoid')(x)
 
-	model = Model(inputs, outputs)
+# 	model = Model(inputs, outputs)
 
-	model.compile(
-		optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNINGRATE),
-		loss=dice_loss,
-		metrics=['accuracy', dice_coeff, iou]
-	)
+# 	model.compile(
+# 		optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNINGRATE),
+# 		loss=hybrid_loss,
+# 		metrics=['accuracy', dice_coeff, iou]
+# 	)
 
-	return model
+# 	return model
+
+def create_model():     # UNet
+    inputs = Input((IMG_SIZE, IMG_SIZE, 1))
+
+    # Encoder
+    x = conv_block(inputs, 32)
+    skip1 = x
+    x = MaxPooling2D()(x)
+
+    x = conv_block(x, 64)
+    skip2 = x
+    x = MaxPooling2D()(x)
+
+    x = conv_block(x, 128)
+    skip3 = x
+    x = MaxPooling2D()(x)
+
+    x = conv_block(x, 256)
+    skip4 = x
+    x = MaxPooling2D()(x)
+
+    # Bridge
+    x = conv_block(x, 512)
+
+    # Decoder (without attention gates)
+    x = Conv2DTranspose(256, 3, strides=2, padding='same')(x)
+    x = concatenate([x, skip4])
+    x = conv_block(x, 256)
+
+    x = Conv2DTranspose(128, 3, strides=2, padding='same')(x)
+    x = concatenate([x, skip3])
+    x = conv_block(x, 128)
+
+    x = Conv2DTranspose(64, 3, strides=2, padding='same')(x)
+    x = concatenate([x, skip2])
+    x = conv_block(x, 64)
+
+    x = Conv2DTranspose(32, 3, strides=2, padding='same')(x)
+    x = concatenate([x, skip1])
+    x = conv_block(x, 32)
+
+    outputs = Conv2D(1, 1, activation='sigmoid')(x)
+
+    model = Model(inputs, outputs)
+
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNINGRATE),
+        loss=dice_loss,
+        metrics=['accuracy', dice_coeff, iou]
+    )
+
+    return model
 
 
 # In[10]:
