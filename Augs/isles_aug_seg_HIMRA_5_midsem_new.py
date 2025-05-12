@@ -309,7 +309,7 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
 		return np.expand_dims(np.array(X), -1), np.expand_dims(np.array(y), -1)   # 4D mask
 		# return np.array(X), np.array(y)     # 3D mask
 
-	def __save_augmented_data(image, mask, filename):
+	def __save_augmented_data(self, image, mask, filename):
 		# Define directories for saving
 		augmented_image_dir = "augmented_images"
 		augmented_mask_dir = "augmented_masks"
