@@ -529,7 +529,8 @@ INPUT_PATH = os.path.join(BASE_PATH, "input")
 MASK_PATH = os.path.join(BASE_PATH, "mask")
 AUG_INPUT_PATH = os.path.join(AUG_PATH, "input")
 AUG_MASK_PATH = os.path.join(AUG_PATH, "mask")
-OUTPUT_DIRECTORY = "./output/ISLESfolder"
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+OUTPUT_DIRECTORY = os.path.join("./output/ISLES22folder", timestamp)
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
 

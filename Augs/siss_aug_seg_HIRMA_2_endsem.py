@@ -25,7 +25,8 @@ from datetime import datetime
 
 # Constants and Paths for SISS2015
 BASE_PATH = "/home/user/adithyaes/dataset/siss15_png/SISS2015_Training"
-OUTPUT_DIRECTORY = "./output/SISS15folder"
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+OUTPUT_DIRECTORY = os.path.join("./output/SISS15folder", timestamp)
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
 # Model parameters
@@ -216,12 +217,26 @@ def attention_occlusion(image, mask):
     
     return modulated_image, mask
 
+def save_augmented_data(image, mask, sample_id, slice_num, output_dir):
+    """
+    Save augmented image and mask to the specified directory.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    image_filename = f'{sample_id}_aug_slice_{slice_num}.png'
+    mask_filename = f'{sample_id}_aug_mask_{slice_num}.png'
+    
+    image_path = os.path.join(output_dir, image_filename)
+    mask_path = os.path.join(output_dir, mask_filename)
+    
+    # Save image and mask
+    cv2.imwrite(image_path, (image * 255).astype(np.uint8))
+    cv2.imwrite(mask_path, (mask * 255).astype(np.uint8))
+
 class HIMRADataGenerator(tf.keras.utils.Sequence):
-    def __init__(self, sample_ids, batch_size=BATCH_SIZE, shuffle=True, max_slices_per_batch=BATCH_SIZE):
+    def __init__(self, sample_ids, batch_size=BATCH_SIZE, shuffle=True):
         self.batch_size = batch_size
         self.sample_ids = sample_ids
         self.shuffle = shuffle
-        self.max_slices_per_batch = max_slices_per_batch
         self.slice_indices = []
         self._build_slice_indices()
         self.__on_epoch_end()
@@ -238,10 +253,10 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
                 self.slice_indices.append((sample_id, slice_num))
     
     def __len__(self):
-        return int(np.floor(len(self.slice_indices) / self.max_slices_per_batch))
+        return int(np.floor(len(self.slice_indices) / self.batch_size))
     
     def __getitem__(self, index):
-        batch_slice_indices = self.slice_indices[index*self.max_slices_per_batch:(index+1)*self.max_slices_per_batch]
+        batch_slice_indices = self.slice_indices[index*self.batch_size:(index+1)*self.batch_size]
         return self.__data_generation(batch_slice_indices)
     
     def __on_epoch_end(self):
@@ -270,9 +285,11 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
             lesion_size = np.sum(mask)
             lesion_class = 1 if lesion_size < 50 else 2 if lesion_size < 100 else 3 if lesion_size < 150 else 4 if lesion_size < 200 else 5
             
-            if np.random.random() > 0.5:
-                img, mask = biomechanical_deformation(img, mask, lesion_class)
-                img, mask = simulate_hemodynamics(img, mask, lesion_class)
+            img, mask = biomechanical_deformation(img, mask, lesion_class)
+            img, mask = simulate_hemodynamics(img, mask, lesion_class)
+            
+            # Save augmented data
+            save_augmented_data(img, mask, sample_id, slice_num, OUTPUT_DIRECTORY)
             
             X.append(img)
             y.append(mask)
