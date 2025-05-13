@@ -538,6 +538,29 @@ if __name__ == "__main__":
     val_gen = HIMRADataGenerator(val_ids, shuffle=False)
     test_gen = HIMRADataGenerator(test_ids, shuffle=False)
 
+    #*#*# DEBUG ---> 
+
+    # Create data generators
+    print("\nCreating generators...")
+    train_gen = HIMRADataGenerator(train_ids)
+    val_gen = HIMRADataGenerator(val_ids, shuffle=False)
+    test_gen = HIMRADataGenerator(test_ids, shuffle=False)
+
+    print("\nGenerator lengths:")
+    print(f"Train: {len(train_gen)} batches")
+    print(f"Val: {len(val_gen)} batches")
+    print(f"Test: {len(test_gen)} batches")
+
+    # Test load a batch
+    print("\nTesting batch loading...")
+    try:
+        X, y = train_gen[0]
+        print(f"Batch shapes: X={X.shape}, y={y.shape}")
+    except Exception as e:
+        print(f"Error loading batch: {e}")
+
+    #*#*# DEBUG <---
+
     # Create and compile model
     model = create_model()
     
