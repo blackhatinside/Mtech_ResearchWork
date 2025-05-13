@@ -513,6 +513,17 @@ if __name__ == "__main__":
 
     print(f"Train: {len(train_ids)}, Val: {len(val_ids)}, Test: {len(test_ids)}")
 
+    # Add this debug code to check what files exist
+    sample_dir = os.path.join(BASE_PATH, "1")
+    all_files = os.listdir(sample_dir)
+    modality_1_files = [f for f in all_files if f.startswith('1_1_slice_')]
+    modality_5_files = [f for f in all_files if f.startswith('1_5_slice_')]
+
+    print(f"Total files: {len(all_files)}")
+    print(f"Modality 1 files: {len(modality_1_files)}")
+    print(f"Modality 5 files: {len(modality_5_files)}")
+    print(f"Sample modality 1 files: {modality_1_files[:5]}")
+
     # Create data generators
     train_gen = HIMRADataGenerator(train_ids)
     val_gen = HIMRADataGenerator(val_ids, shuffle=False)
