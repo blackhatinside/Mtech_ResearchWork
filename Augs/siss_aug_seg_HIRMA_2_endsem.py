@@ -29,7 +29,7 @@ OUTPUT_DIRECTORY = "./output/SISS15folder"
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
 # Model parameters
-IMG_SIZE = 192  # Adjusted for SISS2015 resolution
+IMG_SIZE = 112  # Adjusted for SISS2015 resolution
 BATCH_SIZE = 4
 LEARNINGRATE = 0.001
 EPOCHS = 100
