@@ -217,66 +217,67 @@ def attention_occlusion(image, mask):
     return modulated_image, mask
 
 class HIMRADataGenerator(tf.keras.utils.Sequence):
-    def __init__(self, sample_ids, batch_size=BATCH_SIZE, shuffle=True):
+    def __init__(self, sample_ids, batch_size=BATCH_SIZE, shuffle=True, max_slices_per_batch=BATCH_SIZE):
         self.batch_size = batch_size
         self.sample_ids = sample_ids
         self.shuffle = shuffle
+        self.max_slices_per_batch = max_slices_per_batch
+        self.slice_indices = []
+        self._build_slice_indices()
         self.__on_epoch_end()
-        # Add class-aware sampling
-        self.class_weights = {1: 2.0, 2: 1.5, 3: 1.2, 4: 1.0, 5: 1.0}  # Higher weight for C1
-
-    def __len__(self):
-        return int(np.floor(len(self.sample_ids) / self.batch_size))
-
-    def __getitem__(self, index):
-        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
-        batch_ids = [self.sample_ids[k] for k in indexes]
-        return self.__data_generation(batch_ids)
-
-    def __on_epoch_end(self):
-        self.indexes = np.arange(len(self.sample_ids))
-        if self.shuffle:
-            np.random.shuffle(self.indexes)
-
-    def __data_generation(self, batch_ids):
-        X, y = [], []
-        for sample_id in batch_ids:
+        
+    def _build_slice_indices(self):
+        """Build a list of (sample_id, slice_num) tuples"""
+        self.slice_indices = []
+        for sample_id in self.sample_ids:
             sample_dir = os.path.join(BASE_PATH, str(sample_id))
-            
-            # Get DWI and mask files for this sample
             dwi_files = sorted([f for f in os.listdir(sample_dir) 
                               if f.startswith(f'{sample_id}_{DWI_MODALITY}_slice_') and f.endswith('.png')])
-            
             for f in dwi_files:
-                # Extract slice number from filename
                 slice_num = f.split('_slice_')[-1].replace('.png', '')
+                self.slice_indices.append((sample_id, slice_num))
+    
+    def __len__(self):
+        return int(np.floor(len(self.slice_indices) / self.max_slices_per_batch))
+    
+    def __getitem__(self, index):
+        batch_slice_indices = self.slice_indices[index*self.max_slices_per_batch:(index+1)*self.max_slices_per_batch]
+        return self.__data_generation(batch_slice_indices)
+    
+    def __on_epoch_end(self):
+        if self.shuffle:
+            np.random.shuffle(self.slice_indices)
+    
+    def __data_generation(self, batch_slice_indices):
+        X, y = [], []
+        for sample_id, slice_num in batch_slice_indices:
+            sample_dir = os.path.join(BASE_PATH, str(sample_id))
+            
+            # Construct filenames
+            dwi_filename = f'{sample_id}_{DWI_MODALITY}_slice_{slice_num}.png'
+            mask_filename = f'{sample_id}_{MASK_MODALITY}_slice_{slice_num}.png'
+            
+            img_path = os.path.join(sample_dir, dwi_filename)
+            mask_path = os.path.join(sample_dir, mask_filename)
+            
+            if not os.path.exists(img_path) or not os.path.exists(mask_path):
+                continue
                 
-                # Construct mask filename
-                mask_filename = f'{sample_id}_{MASK_MODALITY}_slice_{slice_num}.png'
-                
-                img_path = os.path.join(sample_dir, f)
-                mask_path = os.path.join(sample_dir, mask_filename)
-                
-                if not os.path.exists(mask_path):
-                    continue
-                
-                img = load_and_preprocess(img_path)
-                mask = load_and_preprocess(mask_path, is_mask=True)
-                
-                # Determine lesion class for class-aware augmentation
-                lesion_size = np.sum(mask)
-                lesion_class = 1 if lesion_size < 50 else 2 if lesion_size < 100 else 3 if lesion_size < 150 else 4 if lesion_size < 200 else 5
-                
-                # Apply HIMRA augmentation with probability
-                if np.random.random() > 0.5:  # 50% chance of augmentation
-                    img, mask = biomechanical_deformation(img, mask, lesion_class)
-                    img, mask = simulate_hemodynamics(img, mask, lesion_class)
-                    # img, mask = attention_occlusion(img, mask)
-                
-                X.append(img)
-                y.append(mask)
+            img = load_and_preprocess(img_path)
+            mask = load_and_preprocess(mask_path, is_mask=True)
+            
+            # Apply augmentation
+            lesion_size = np.sum(mask)
+            lesion_class = 1 if lesion_size < 50 else 2 if lesion_size < 100 else 3 if lesion_size < 150 else 4 if lesion_size < 200 else 5
+            
+            if np.random.random() > 0.5:
+                img, mask = biomechanical_deformation(img, mask, lesion_class)
+                img, mask = simulate_hemodynamics(img, mask, lesion_class)
+            
+            X.append(img)
+            y.append(mask)
         
-        return np.expand_dims(np.array(X), -1), np.expand_dims(np.array(y), -1)   # 4D mask
+        return np.expand_dims(np.array(X), -1), np.expand_dims(np.array(y), -1)
 
 def conv_block(inp, filters):
     x = Conv2D(filters, 3, padding='same', use_bias=False)(inp)
