@@ -513,6 +513,13 @@ if __name__ == "__main__":
 
     print(f"Train: {len(train_ids)}, Val: {len(val_ids)}, Test: {len(test_ids)}")
 
+    #*#*# DEBUG --->
+
+    # Verify paths
+    print(f"BASE_PATH: {BASE_PATH}")
+    print(f"Does path exist: {os.path.exists(BASE_PATH)}")
+    print(f"Sample directories: {os.listdir(BASE_PATH)[:5]}")
+
     # Add this debug code to check what files exist
     sample_dir = os.path.join(BASE_PATH, "1")
     all_files = os.listdir(sample_dir)
@@ -523,6 +530,8 @@ if __name__ == "__main__":
     print(f"Modality 1 files: {len(modality_1_files)}")
     print(f"Modality 5 files: {len(modality_5_files)}")
     print(f"Sample modality 1 files: {modality_1_files[:5]}")
+
+    #*#*# DEBUG <---
 
     # Create data generators
     train_gen = HIMRADataGenerator(train_ids)
