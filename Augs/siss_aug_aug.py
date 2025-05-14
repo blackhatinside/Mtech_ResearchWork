@@ -75,7 +75,7 @@ class AugmentationFactory:
                         p=0.8
                     ),
                     A.Blur(
-                        blur_limit=2,
+                        blur_limit=3,
                         p=0.8
                     ),
                 ], p=0.5),
