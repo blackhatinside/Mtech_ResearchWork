@@ -4,6 +4,7 @@
 import cv2
 import numpy as np
 import os
+import re
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 import tensorflow as tf
@@ -15,7 +16,7 @@ from scipy import ndimage
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-# Constants and Paths for ISLES2015
+# Constants and Paths for ISLES2022
 BASE_PATH = "/home/user/adithyaes/dataset/isles2022_png"
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 OUTPUT_DIRECTORY = os.path.join("./output/ISLES22folder", timestamp)
@@ -29,11 +30,7 @@ EPOCHS = 100
 EARLYSTOPPING = 60
 scaler = MinMaxScaler(feature_range=(-1, 1))
 
-# CBF modality = 1, Mask modality = 6
-CBF_MODALITY = 1
-MASK_MODALITY = 6
-
-# Metrics
+# [Keep all the metrics and loss functions as they are]
 def dice_coeff(y_true, y_pred):
     y_true_f = K.flatten(y_true)
     y_pred_f = K.flatten(y_pred)
@@ -45,7 +42,6 @@ def iou(y_true, y_pred):
     union = K.sum(y_true + y_pred)
     return (intersection + 0.1) / (union - intersection + 0.1)
 
-# Loss Functions
 def single_dice_loss(y_true, y_pred):
     return 1.0 - dice_coeff(y_true, y_pred)
 
@@ -85,14 +81,24 @@ def load_and_preprocess(file_path, is_mask=False):
         img = img / 255.0
     return img
 
-# Get case IDs from the original dataset
+# Modified function to extract case IDs from the new naming convention
 def get_case_ids(path):
-    """Get all sample IDs from a directory"""
-    if not os.path.exists(path):
+    """Extract unique case IDs from files in input directory"""
+    input_dir = os.path.join(path, "input")
+    if not os.path.exists(input_dir):
         return []
-    return sorted([d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))])
+    
+    case_ids = set()
+    for filename in os.listdir(input_dir):
+        if filename.endswith(".png"):
+            # Extract case ID from pattern: slice_sub-strokecaseXXXX_YYYY.png
+            match = re.match(r'slice_sub-(strokecase\d+)_\d+\.png', filename)
+            if match:
+                case_ids.add(match.group(1))
+    
+    return sorted(list(case_ids))
 
-# Simple DataGenerator without augmentation
+# Modified DataGenerator for new file structure
 class SimpleDataGenerator(tf.keras.utils.Sequence):
     def __init__(self, sample_ids, batch_size=BATCH_SIZE, shuffle=True):
         self.batch_size = batch_size
@@ -106,14 +112,19 @@ class SimpleDataGenerator(tf.keras.utils.Sequence):
         """Build a list of (sample_id, slice_num) tuples"""
         self.slice_indices = []
         
+        input_dir = os.path.join(BASE_PATH, "input")
+        
         for sample_id in self.sample_ids:
-            sample_dir = os.path.join(BASE_PATH, str(sample_id))
-            cbf_files = sorted([f for f in os.listdir(sample_dir) 
-                              if f.startswith(f'{sample_id}_{CBF_MODALITY}_slice_') and f.endswith('.png')])
+            # Find all files for this case
+            pattern = f'slice_sub-{sample_id}_*.png'
+            files = [f for f in os.listdir(input_dir) if re.match(f'slice_sub-{sample_id}_\\d+\\.png', f)]
             
-            for f in cbf_files:
-                slice_num = f.split('_slice_')[-1].replace('.png', '')
-                self.slice_indices.append((sample_id, slice_num))
+            for f in files:
+                # Extract slice number from filename
+                match = re.match(f'slice_sub-{sample_id}_(\\d+)\\.png', f)
+                if match:
+                    slice_num = match.group(1)
+                    self.slice_indices.append((sample_id, slice_num))
     
     def __len__(self):
         return int(np.floor(len(self.slice_indices) / self.batch_size))
@@ -129,14 +140,12 @@ class SimpleDataGenerator(tf.keras.utils.Sequence):
     def __data_generation(self, batch_slice_indices):
         X, y = [], []
         for sample_id, slice_num in batch_slice_indices:
-            # Load from original dataset
-            sample_dir = os.path.join(BASE_PATH, str(sample_id))
+            # Construct filenames based on new naming convention
+            input_filename = f'slice_sub-{sample_id}_{slice_num}.png'
+            mask_filename = f'slice_sub-{sample_id}_{slice_num}.png'
             
-            cbf_filename = f'{sample_id}_{CBF_MODALITY}_slice_{slice_num}.png'
-            mask_filename = f'{sample_id}_{MASK_MODALITY}_slice_{slice_num}.png'
-            
-            img_path = os.path.join(sample_dir, cbf_filename)
-            mask_path = os.path.join(sample_dir, mask_filename)
+            img_path = os.path.join(BASE_PATH, "input", input_filename)
+            mask_path = os.path.join(BASE_PATH, "mask", mask_filename)
             
             if not os.path.exists(img_path) or not os.path.exists(mask_path):
                 continue
@@ -149,7 +158,7 @@ class SimpleDataGenerator(tf.keras.utils.Sequence):
         
         return np.expand_dims(np.array(X), -1), np.expand_dims(np.array(y), -1)
 
-# Model Architecture
+# [Keep the model architecture and utility functions as they are]
 def conv_block(inp, filters):
     x = Conv2D(filters, 3, padding='same', use_bias=False)(inp)
     x = BatchNormalization()(x)
@@ -214,11 +223,11 @@ def create_model():
 
     return model
 
-# Utility Functions
+# [Keep all utility functions as they are]
 def plot_training_metrics(history):
     metrics = ['loss', 'dice_coeff', 'iou', 'accuracy']
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
-    fig.suptitle('ISLES2015 Training Metrics Over Epochs (No Augmentation)', fontsize=16)
+    fig.suptitle('ISLES2022 Training Metrics Over Epochs (No Augmentation)', fontsize=16)
 
     for idx, metric in enumerate(metrics):
         ax = axes[idx//2, idx%2]
@@ -263,7 +272,7 @@ def visualize_segmentation_results(model, test_gen, num_samples=3):
     for idx in range(min(num_samples, len(test_images))):
         plt.subplot(num_samples, 2, 2*idx + 1)
         plt.imshow(test_images[idx, :, :, 0], cmap='gray')
-        plt.title(f'Input CBF Image {idx+1}')
+        plt.title(f'Input Image {idx+1}')
         plt.axis('off')
 
         plt.subplot(num_samples, 2, 2*idx + 2)
@@ -280,7 +289,6 @@ def visualize_segmentation_results(model, test_gen, num_samples=3):
                 bbox_inches='tight', dpi=300)
     plt.close()
 
-# Class-wise Dice Score Calculation
 def calculate_class_wise_dice(model, test_gen):
     class_dice_scores = {f'C{i}': [] for i in range(1, 6)}
     
@@ -322,7 +330,7 @@ def visualize_class_wise_dice(scores, output_dir):
     plt.bar(classes, values, color='skyblue')
     plt.xlabel('Lesion Size Class')
     plt.ylabel('Mean Dice Score')
-    plt.title('ISLES2015 Class-wise Dice Scores (No Augmentation)')
+    plt.title('ISLES2022 Class-wise Dice Scores (No Augmentation)')
     plt.ylim(0, 1)
     
     for i, v in enumerate(values):
@@ -343,10 +351,10 @@ if __name__ == "__main__":
         for gpu in gpus:
             tf.config.experimental.set_memory_growth(gpu, True)
 
-    # Get sample IDs from the original dataset
+    # Get sample IDs from the modified dataset structure
     sample_ids = get_case_ids(BASE_PATH)
     
-    print(f"Original samples: {len(sample_ids)}")
+    print(f"Found {len(sample_ids)} unique cases: {sample_ids}")
     
     # Split into train, validation, and test sets
     train_ids, test_ids = train_test_split(sample_ids, test_size=0.2, random_state=42)
@@ -362,4 +370,65 @@ if __name__ == "__main__":
     # Create and compile model
     model = create_model()
     
-    print("Model Summary: ")
+    print("Model Summary:")
+    model.summary()
+
+    # Define callbacks
+    model_checkpoint = ModelCheckpoint(
+        os.path.join(OUTPUT_DIRECTORY, 'best_model.h5'),
+        monitor='val_dice_coeff',
+        save_best_only=True,
+        mode='max',
+        verbose=1
+    )
+    
+    early_stopping = EarlyStopping(
+        monitor='val_dice_coeff',
+        patience=EARLYSTOPPING,
+        restore_best_weights=True,
+        mode='max',
+        verbose=1
+    )
+    
+    reduce_lr = ReduceLROnPlateau(
+        monitor='val_loss',
+        factor=0.5,
+        patience=10,
+        min_lr=1e-7,
+        verbose=1
+    )
+    
+    # Train the model
+    history = model.fit(
+        train_gen,
+        validation_data=val_gen,
+        epochs=EPOCHS,
+        callbacks=[model_checkpoint, early_stopping, reduce_lr],
+        verbose=1
+    )
+    
+    # Plot training metrics
+    plot_training_metrics(history)
+    
+    # Evaluate on test set
+    test_loss, test_acc, test_dice, test_iou = model.evaluate(test_gen, verbose=1)
+    print(f"\nTest Results:")
+    print(f"Loss: {test_loss:.4f}")
+    print(f"Accuracy: {test_acc:.4f}")
+    print(f"Dice Coefficient: {test_dice:.4f}")
+    print(f"IoU: {test_iou:.4f}")
+    
+    # Visualize segmentation results
+    visualize_segmentation_results(model, test_gen)
+    
+    # Calculate and visualize class-wise dice scores
+    class_dice_scores = calculate_class_wise_dice(model, test_gen)
+    print("\nClass-wise Dice Scores:")
+    for cls, score in class_dice_scores.items():
+        print(f"{cls}: {score:.4f}")
+    
+    visualize_class_wise_dice(class_dice_scores, OUTPUT_DIRECTORY)
+    
+    # Save the final model
+    model.save(os.path.join(OUTPUT_DIRECTORY, 'final_model.h5'))
+    print(f"\nModel and results saved to: {OUTPUT_DIRECTORY}")
