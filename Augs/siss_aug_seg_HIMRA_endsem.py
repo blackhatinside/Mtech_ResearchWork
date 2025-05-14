@@ -18,6 +18,7 @@ from datetime import datetime
 
 # Constants and Paths for SISS2015
 BASE_PATH = "/home/user/adithyaes/dataset/siss15_png/SISS2015_Training"
+AUG_PATH = "/home/user/adithyaes/dataset/siss15_png_aug"
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 OUTPUT_DIRECTORY = os.path.join("./output/SISS15folder", timestamp)
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
@@ -194,25 +195,59 @@ def save_augmented_data(image, mask, sample_id, slice_num, output_dir):
     cv2.imwrite(image_path, (image * 255).astype(np.uint8))
     cv2.imwrite(mask_path, (mask * 255).astype(np.uint8))
 
-# Data Generator
+# Add function to get case IDs from both original and augmented datasets
+def get_case_ids(path):
+    """Get all sample IDs from a directory"""
+    if not os.path.exists(path):
+        return []
+    
+    if os.path.exists(os.path.join(path, "input")):
+        # For augmented data structure
+        files = sorted([f for f in os.listdir(os.path.join(path, "input")) if f.endswith('.png')])
+        return sorted(list({f.split('_')[0] for f in files}))
+    else:
+        # For original data structure
+        return sorted([d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))])
+
+# Modify the HIMRADataGenerator class to handle both original and augmented data
 class HIMRADataGenerator(tf.keras.utils.Sequence):
-    def __init__(self, sample_ids, batch_size=BATCH_SIZE, shuffle=True):
+    def __init__(self, sample_ids, aug_ids=None, batch_size=BATCH_SIZE, shuffle=True):
         self.batch_size = batch_size
         self.sample_ids = sample_ids
+        self.aug_ids = aug_ids if aug_ids is not None else []
+        self.all_ids = list(set(self.sample_ids + self.aug_ids))  # Use set to avoid duplicates
         self.shuffle = shuffle
         self.slice_indices = []
         self._build_slice_indices()
         self.__on_epoch_end()
         
     def _build_slice_indices(self):
+        """Build a list of (sample_id, slice_num, is_aug) tuples"""
         self.slice_indices = []
+        
+        # Process original dataset
         for sample_id in self.sample_ids:
+            if sample_id in self.aug_ids:
+                continue  # Skip if this ID is also in augmented data to avoid duplicates
+                
             sample_dir = os.path.join(BASE_PATH, str(sample_id))
             dwi_files = sorted([f for f in os.listdir(sample_dir) 
                               if f.startswith(f'{sample_id}_{DWI_MODALITY}_slice_') and f.endswith('.png')])
+            
             for f in dwi_files:
                 slice_num = f.split('_slice_')[-1].replace('.png', '')
-                self.slice_indices.append((sample_id, slice_num))
+                self.slice_indices.append((sample_id, slice_num, False))
+        
+        # Process augmented dataset
+        for sample_id in self.aug_ids:
+            # For augmented data, we need to look in the input directory
+            input_dir = os.path.join(AUG_PATH, "input")
+            dwi_files = sorted([f for f in os.listdir(input_dir) 
+                              if f.startswith(f'{sample_id}_{DWI_MODALITY}_slice_') and f.endswith('.png')])
+            
+            for f in dwi_files:
+                slice_num = f.split('_slice_')[-1].replace('.png', '')
+                self.slice_indices.append((sample_id, slice_num, True))
     
     def __len__(self):
         return int(np.floor(len(self.slice_indices) / self.batch_size))
@@ -227,17 +262,26 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
     
     def __data_generation(self, batch_slice_indices):
         X, y = [], []
-        augmented_images_dir = os.path.join(OUTPUT_DIRECTORY, "augmented_images")
-        augmented_masks_dir = os.path.join(OUTPUT_DIRECTORY, "augmented_masks")
-        
-        for sample_id, slice_num in batch_slice_indices:
-            sample_dir = os.path.join(BASE_PATH, str(sample_id))
-            
-            dwi_filename = f'{sample_id}_{DWI_MODALITY}_slice_{slice_num}.png'
-            mask_filename = f'{sample_id}_{MASK_MODALITY}_slice_{slice_num}.png'
-            
-            img_path = os.path.join(sample_dir, dwi_filename)
-            mask_path = os.path.join(sample_dir, mask_filename)
+        for sample_id, slice_num, is_aug in batch_slice_indices:
+            if is_aug:
+                # Load from augmented dataset
+                input_dir = os.path.join(AUG_PATH, "input")
+                mask_dir = os.path.join(AUG_PATH, "mask")
+                
+                dwi_filename = f'{sample_id}_{DWI_MODALITY}_slice_{slice_num}.png'
+                mask_filename = f'{sample_id}_{MASK_MODALITY}_slice_{slice_num}.png'
+                
+                img_path = os.path.join(input_dir, dwi_filename)
+                mask_path = os.path.join(mask_dir, mask_filename)
+            else:
+                # Load from original dataset
+                sample_dir = os.path.join(BASE_PATH, str(sample_id))
+                
+                dwi_filename = f'{sample_id}_{DWI_MODALITY}_slice_{slice_num}.png'
+                mask_filename = f'{sample_id}_{MASK_MODALITY}_slice_{slice_num}.png'
+                
+                img_path = os.path.join(sample_dir, dwi_filename)
+                mask_path = os.path.join(sample_dir, mask_filename)
             
             if not os.path.exists(img_path) or not os.path.exists(mask_path):
                 continue
@@ -245,13 +289,18 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
             img = load_and_preprocess(img_path)
             mask = load_and_preprocess(mask_path, is_mask=True)
             
+            # Apply augmentation during training for both original and augmented data
             lesion_size = np.sum(mask)
             lesion_class = 1 if lesion_size < 50 else 2 if lesion_size < 100 else 3 if lesion_size < 150 else 4 if lesion_size < 200 else 5
             
+            # Apply real-time augmentation
             img, mask = biomechanical_deformation(img, mask, lesion_class)
             img, mask = simulate_hemodynamics(img, mask, lesion_class)
             
-            save_augmented_data(img, mask, sample_id, slice_num, augmented_images_dir)
+            # Save augmented data for visualization
+            aug_output_dir = os.path.join(OUTPUT_DIRECTORY, "augmented_samples")
+            os.makedirs(aug_output_dir, exist_ok=True)
+            save_augmented_data(img, mask, sample_id, slice_num, aug_output_dir)
             
             X.append(img)
             y.append(mask)
@@ -452,17 +501,20 @@ if __name__ == "__main__":
         for gpu in gpus:
             tf.config.experimental.set_memory_growth(gpu, True)
 
-    # Get sample IDs (1-28 for SISS2015)
-    sample_ids = list(range(1, 29))
+    # Get sample IDs from both original and augmented datasets
+    sample_ids = get_case_ids(BASE_PATH)
+    aug_sample_ids = get_case_ids(AUG_PATH)
     
-    # Split into train, validation, and test sets
+    print(f"Original samples: {len(sample_ids)}, Augmented samples: {len(aug_sample_ids)}")
+    
+    # Split into train, validation, and test sets (using only original data for test)
     train_ids, test_ids = train_test_split(sample_ids, test_size=0.2, random_state=42)
     train_ids, val_ids = train_test_split(train_ids, test_size=0.2, random_state=42)
 
-    print(f"Train: {len(train_ids)}, Val: {len(val_ids)}, Test: {len(test_ids)}")
+    print(f"Train: {len(train_ids)}, Val: {len(val_ids)}, Test: {len(test_ids)}, Aug: {len(aug_sample_ids)}")
 
     # Create data generators
-    train_gen = HIMRADataGenerator(train_ids)
+    train_gen = HIMRADataGenerator(train_ids, aug_ids=aug_sample_ids)
     val_gen = HIMRADataGenerator(val_ids, shuffle=False)
     test_gen = HIMRADataGenerator(test_ids, shuffle=False)
 
@@ -474,11 +526,9 @@ if __name__ == "__main__":
 
     # Define callbacks
     callbacks = [
-        ModelCheckpoint(os.path.join(OUTPUT_DIRECTORY, 'best_siss15_model.h5'), 
-                       monitor='val_dice_coeff', mode='max',
+        ModelCheckpoint('best_siss15_model.h5', monitor='val_dice_coeff', mode='max',
                        save_best_only=True, verbose=1),
-        EarlyStopping(monitor='val_loss', patience=EARLYSTOPPING, 
-                     restore_best_weights=True, verbose=1),
+        EarlyStopping(monitor='val_loss', patience=EARLYSTOPPING, restore_best_weights=True, verbose=1),
         ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, verbose=1)
     ]
 
