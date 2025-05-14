@@ -1,8 +1,14 @@
+# SISS Traditional Data Augmentation
+
 import cv2
 import numpy as np
 import os
 import albumentations as A
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+import random
+import math
+from collections import defaultdict
 import logging
 import sys
 from datetime import datetime
@@ -25,10 +31,8 @@ AUG_MASK_PATH = os.path.join(AUG_BASE_PATH, "mask")
 
 # Global Variables
 IMG_SIZE = 112
-
-def generate_new_filename(sample_id, modality_id, slice_num):
-    """Generate filename following the pattern: {sample_id}_{modality_id}_slice_{slice_num}.png"""
-    return f'{sample_id}_{modality_id}_slice_{slice_num}.png'
+DWI_MODALITY = 1
+MASK_MODALITY = 5
 
 class LesionClassifier:
     def __init__(self):
@@ -52,11 +56,14 @@ class LesionClassifier:
                 return class_name
         return 'C5' if white_pixels > self.class_ranges['C4'][1] else None
 
+    def get_white_pixel_count(self, mask):
+        """Return the number of white pixels in mask"""
+        return np.sum(mask > 0) if mask is not None else 0
+
 class AugmentationFactory:
     @staticmethod
     def get_transform_for_class(class_name):
-        """Get minimal augmentation transforms to prevent data loss"""
-        # Base transform just resizes the image
+        """Get appropriate augmentation transform for each class"""
         base_transform = A.Compose([
             A.Resize(height=IMG_SIZE, width=IMG_SIZE, always_apply=True)
         ])
@@ -64,15 +71,13 @@ class AugmentationFactory:
         transforms = {
             'C1': A.Compose([
                 A.Resize(height=IMG_SIZE, width=IMG_SIZE, always_apply=True),
-                # Very minimal brightness/contrast adjustments
                 A.RandomBrightnessContrast(
                     brightness_limit=0.05,
                     contrast_limit=0.05,
                     p=0.7
                 ),
-                # Minimal rotation to avoid losing small lesions
                 A.Rotate(
-                    limit=5,  # Very small rotation angle
+                    limit=5,
                     border_mode=cv2.BORDER_CONSTANT,
                     value=0,
                     p=0.5
@@ -81,13 +86,9 @@ class AugmentationFactory:
 
             'C2': A.Compose([
                 A.Resize(height=IMG_SIZE, width=IMG_SIZE, always_apply=True),
-                A.RandomBrightnessContrast(
-                    brightness_limit=0.05,
-                    contrast_limit=0.05,
-                    p=0.7
-                ),
+                A.RandomBrightnessContrast(p=0.7),
                 A.Rotate(
-                    limit=10,  # Slightly larger rotation for medium lesions
+                    limit=10,
                     border_mode=cv2.BORDER_CONSTANT,
                     value=0,
                     p=0.5
@@ -96,11 +97,7 @@ class AugmentationFactory:
 
             'C3': A.Compose([
                 A.Resize(height=IMG_SIZE, width=IMG_SIZE, always_apply=True),
-                A.RandomBrightnessContrast(
-                    brightness_limit=0.05,
-                    contrast_limit=0.05,
-                    p=0.7
-                ),
+                A.RandomBrightnessContrast(p=0.6),
                 A.Rotate(
                     limit=15,
                     border_mode=cv2.BORDER_CONSTANT,
@@ -111,11 +108,7 @@ class AugmentationFactory:
 
             'C4': A.Compose([
                 A.Resize(height=IMG_SIZE, width=IMG_SIZE, always_apply=True),
-                A.RandomBrightnessContrast(
-                    brightness_limit=0.05,
-                    contrast_limit=0.05,
-                    p=0.7
-                ),
+                A.RandomBrightnessContrast(p=0.5),
                 A.Rotate(
                     limit=20,
                     border_mode=cv2.BORDER_CONSTANT,
@@ -131,133 +124,117 @@ class AugmentationFactory:
                     contrast_limit=0.05,
                     p=0.7
                 ),
-                A.Rotate(
-                    limit=25,
-                    border_mode=cv2.BORDER_CONSTANT,
-                    value=0,
-                    p=0.5
-                ),
             ], p=1.0),
         }
 
         return transforms.get(class_name, base_transform)
 
-class ImagePairProcessor:
-    def __init__(self):
-        self.classifier = LesionClassifier()
-        self.aug_factory = AugmentationFactory()
-
-    def validate_augmented_pair(self, image, mask):
-        """Validate augmented image-mask pair with relaxed criteria"""
-        try:
-            # Check if mask still contains any lesion pixels
-            white_pixels = np.sum(mask > 0)
-            if white_pixels == 0:
-                return False
-
-            # More lenient check for binary mask - allow some interpolated values
-            # Just ensure there are mostly 0s and high values
-            return True
-
-        except Exception as e:
-            logging.error(f"Error in validate_augmented_pair: {str(e)}")
-            return False
-
-    def safe_augment_pair(self, image, mask, transform, max_attempts=5):
-        """Attempt augmentation with validation and simple fallback"""
-        if transform is None:
-            return image, mask
-
-        for attempt in range(max_attempts):
-            try:
-                augmented = transform(
-                    image=image.copy(),
-                    mask=mask.copy()
-                )
-                aug_image = augmented['image']
-                aug_mask = augmented['mask']
-
-                # Ensure mask is binary
-                aug_mask = (aug_mask > 127).astype(np.uint8) * 255
-
-                if self.validate_augmented_pair(aug_image, aug_mask):
-                    return aug_image, aug_mask
-
-            except Exception as e:
-                logging.error(f"Error in augmentation attempt {attempt}: {str(e)}")
-                continue
-
-        # Fallback to just resizing if all augmentations fail
-        logging.warning("All augmentation attempts failed, using resize-only fallback")
-        try:
-            resize_only = A.Compose([
-                A.Resize(height=IMG_SIZE, width=IMG_SIZE, always_apply=True)
-            ])
-            augmented = resize_only(image=image.copy(), mask=mask.copy())
-            return augmented['image'], (augmented['mask'] > 127).astype(np.uint8) * 255
-        except Exception as e:
-            logging.error(f"Fallback augmentation failed: {str(e)}")
-            return image, mask
-
-    def process_image_pair(self, raw_img, mask_img):
-        """Process and classify a single image pair"""
-        try:
-            class_name = self.classifier.get_class(mask_img)
-            if class_name is None:
-                return None, None, None
-
-            transform = self.aug_factory.get_transform_for_class(class_name)
-            return raw_img, mask_img, class_name
-
-        except Exception as e:
-            logging.error(f"Error in process_image_pair: {str(e)}")
-            return None, None, None
-
 def main():
     try:
         logging.info("Starting SISS dataset augmentation...")
 
+        # Create output directories
         os.makedirs(AUG_INPUT_PATH, exist_ok=True)
         os.makedirs(AUG_MASK_PATH, exist_ok=True)
 
-        processor = ImagePairProcessor()
+        # Initialize processors
+        classifier = LesionClassifier()
+        aug_factory = AugmentationFactory()
 
+        # Store classified images
+        class_images = defaultdict(list)
+        class_distribution = defaultdict(int)
+
+        # First pass: classify all images
+        logging.info("Processing and classifying images...")
         sample_dirs = [d for d in os.listdir(BASE_PATH) if os.path.isdir(os.path.join(BASE_PATH, d))]
-
+        
         for sample_id in sample_dirs:
             sample_dir = os.path.join(BASE_PATH, sample_id)
-            dwi_files = sorted([f for f in os.listdir(sample_dir) if f.endswith('.png') and '_1_' in f])
-            mask_files = sorted([f for f in os.listdir(sample_dir) if f.endswith('.png') and '_5_' in f])
-
-            for dwi_file, mask_file in tqdm(zip(dwi_files, mask_files), total=len(dwi_files)):
+            dwi_files = sorted([f for f in os.listdir(sample_dir) if f.endswith('.png') and f'_{DWI_MODALITY}_' in f])
+            mask_files = sorted([f for f in os.listdir(sample_dir) if f.endswith('.png') and f'_{MASK_MODALITY}_' in f])
+            
+            for dwi_file, mask_file in zip(dwi_files, mask_files):
+                # Load images
                 dwi_img = cv2.imread(os.path.join(sample_dir, dwi_file), cv2.IMREAD_GRAYSCALE)
                 mask_img = cv2.imread(os.path.join(sample_dir, mask_file), cv2.IMREAD_GRAYSCALE)
-
+                
                 if dwi_img is None or mask_img is None:
                     logging.warning(f"Could not load images: {dwi_file}, {mask_file}")
                     continue
-
-                dwi_img, mask_img, class_name = processor.process_image_pair(dwi_img, mask_img)
-
+                
+                # Resize images
+                dwi_img = cv2.resize(dwi_img, (IMG_SIZE, IMG_SIZE))
+                mask_img = cv2.resize(mask_img, (IMG_SIZE, IMG_SIZE))
+                mask_img = (mask_img > 127).astype(np.uint8) * 255
+                
+                # Classify
+                class_name = classifier.get_class(mask_img)
                 if class_name is not None:
-                    transform = processor.aug_factory.get_transform_for_class(class_name)
-                    aug_img, aug_mask = processor.safe_augment_pair(dwi_img, mask_img, transform)
+                    class_images[class_name].append((dwi_img, mask_img, dwi_file, mask_file, sample_id))
+                    class_distribution[class_name] += 1
 
-                    # Ensure both images are properly resized to IMG_SIZE
-                    if aug_img.shape != (IMG_SIZE, IMG_SIZE):
-                        aug_img = cv2.resize(aug_img, (IMG_SIZE, IMG_SIZE))
-                    if aug_mask.shape != (IMG_SIZE, IMG_SIZE):
-                        aug_mask = cv2.resize(aug_mask, (IMG_SIZE, IMG_SIZE))
-                        aug_mask = (aug_mask > 127).astype(np.uint8) * 255
+        # Find target count (maximum class size)
+        target_count = max(class_distribution.values())
 
-                    slice_num = dwi_file.split('_')[-1].replace('.png', '')
-                    aug_dwi_filename = generate_new_filename(sample_id, 1, slice_num)
-                    aug_mask_filename = generate_new_filename(sample_id, 5, slice_num)
+        logging.info("\nOriginal class distribution:")
+        for class_name, count in class_distribution.items():
+            logging.info(f"{class_name}: {count} samples")
 
-                    cv2.imwrite(os.path.join(AUG_INPUT_PATH, aug_dwi_filename), aug_img)
-                    cv2.imwrite(os.path.join(AUG_MASK_PATH, aug_mask_filename), aug_mask)
+        # Perform augmentation for each class
+        logging.info("\nPerforming class-specific augmentation...")
+        augmented_pairs = []
+        augmented_distribution = defaultdict(int)
 
-        logging.info("Augmentation complete!")
+        for class_name, images in class_images.items():
+            current_count = len(images)
+            augmented_distribution[class_name] = current_count
+
+            if current_count < target_count:
+                multiplier = math.ceil(target_count / current_count)
+                transform = aug_factory.get_transform_for_class(class_name)
+
+                logging.info(f"\nAugmenting class {class_name} ({current_count} → {target_count})")
+
+                for img, mask, dwi_file, mask_file, sample_id in tqdm(images):
+                    # Generate augmented versions
+                    for aug_idx in range(multiplier - 1):
+                        try:
+                            augmented = transform(
+                                image=img.copy(),
+                                mask=mask.copy()
+                            )
+                            aug_img = augmented['image']
+                            aug_mask = augmented['mask']
+                            
+                            # Ensure mask is binary
+                            aug_mask = (aug_mask > 127).astype(np.uint8) * 255
+                            
+                            # Check if mask still has lesions
+                            if np.sum(aug_mask > 0) > 0:
+                                slice_num = dwi_file.split('_slice_')[-1].replace('.png', '')
+                                augmented_pairs.append((aug_img, aug_mask, sample_id, slice_num))
+                                augmented_distribution[class_name] += 1
+                        except Exception as e:
+                            logging.error(f"Error in augmentation: {str(e)}")
+                            continue
+
+        # Save augmented pairs
+        logging.info("\nSaving augmented images...")
+        for img, mask, sample_id, slice_num in tqdm(augmented_pairs):
+            dwi_filename = f'{sample_id}_{DWI_MODALITY}_slice_{slice_num}.png'
+            mask_filename = f'{sample_id}_{MASK_MODALITY}_slice_{slice_num}.png'
+            
+            cv2.imwrite(os.path.join(AUG_INPUT_PATH, dwi_filename), img)
+            cv2.imwrite(os.path.join(AUG_MASK_PATH, mask_filename), mask)
+
+        logging.info("\nAugmentation complete!")
+        logging.info(f"Total augmented pairs generated: {len(augmented_pairs)}")
+
+        # Final class distribution
+        logging.info("\nFinal class distribution:")
+        for class_name, count in augmented_distribution.items():
+            logging.info(f"{class_name}: {count} samples")
 
     except Exception as e:
         logging.error(f"Error in main execution: {str(e)}")
@@ -265,3 +242,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
