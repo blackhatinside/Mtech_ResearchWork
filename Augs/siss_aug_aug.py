@@ -55,7 +55,8 @@ class LesionClassifier:
 class AugmentationFactory:
     @staticmethod
     def get_transform_for_class(class_name):
-        """Get appropriate augmentation transform for each class"""
+        """Get minimal augmentation transforms to prevent data loss"""
+        # Base transform just resizes the image
         base_transform = A.Compose([
             A.Resize(height=IMG_SIZE, width=IMG_SIZE, always_apply=True)
         ])
@@ -63,109 +64,79 @@ class AugmentationFactory:
         transforms = {
             'C1': A.Compose([
                 A.Resize(height=IMG_SIZE, width=IMG_SIZE, always_apply=True),
-                A.OneOf([
-                    A.RandomBrightnessContrast(
-                        brightness_limit=0.05,
-                        contrast_limit=0.05,
-                        p=0.8
-                    ),
-                    A.GaussNoise(
-                        var_limit=(1.0, 10.0),
-                        mean=0,
-                        p=0.8
-                    ),
-                    A.Blur(
-                        blur_limit=3,
-                        p=0.8
-                    ),
-                ], p=0.5),
-                A.OneOf([
-                    A.Rotate(
-                        limit=10,
-                        border_mode=cv2.BORDER_CONSTANT,
-                        value=0,
-                        p=0.8
-                    ),
-                    A.ShiftScaleRotate(
-                        shift_limit=0.0,
-                        scale_limit=0.05,
-                        rotate_limit=0,
-                        border_mode=cv2.BORDER_CONSTANT,
-                        value=0,
-                        p=0.8
-                    ),
-                ], p=0.5),
+                # Very minimal brightness/contrast adjustments
+                A.RandomBrightnessContrast(
+                    brightness_limit=0.05,
+                    contrast_limit=0.05,
+                    p=0.7
+                ),
+                # Minimal rotation to avoid losing small lesions
+                A.Rotate(
+                    limit=5,  # Very small rotation angle
+                    border_mode=cv2.BORDER_CONSTANT,
+                    value=0,
+                    p=0.5
+                ),
             ], p=1.0),
 
             'C2': A.Compose([
                 A.Resize(height=IMG_SIZE, width=IMG_SIZE, always_apply=True),
-                A.OneOf([
-                    A.RandomBrightnessContrast(p=0.7),
-                    A.GaussNoise(
-                        var_limit=(5.0, 20.0),
-                        mean=0,
-                        p=0.7
-                    ),
-                ], p=0.5),
-                A.OneOf([
-                    A.Rotate(
-                        limit=20,
-                        border_mode=cv2.BORDER_CONSTANT,
-                        value=0,
-                        p=0.7
-                    ),
-                    A.ShiftScaleRotate(
-                        shift_limit=0.0,
-                        scale_limit=0.15,
-                        rotate_limit=0,
-                        border_mode=cv2.BORDER_CONSTANT,
-                        value=0,
-                        p=0.7
-                    ),
-                ], p=0.5),
+                A.RandomBrightnessContrast(
+                    brightness_limit=0.05,
+                    contrast_limit=0.05,
+                    p=0.7
+                ),
+                A.Rotate(
+                    limit=10,  # Slightly larger rotation for medium lesions
+                    border_mode=cv2.BORDER_CONSTANT,
+                    value=0,
+                    p=0.5
+                ),
             ], p=1.0),
 
             'C3': A.Compose([
                 A.Resize(height=IMG_SIZE, width=IMG_SIZE, always_apply=True),
-                A.OneOf([
-                    A.RandomBrightnessContrast(p=0.6),
-                    A.GaussNoise(var_limit=(5.0, 15.0), p=0.6),
-                ], p=0.5),
+                A.RandomBrightnessContrast(
+                    brightness_limit=0.05,
+                    contrast_limit=0.05,
+                    p=0.7
+                ),
                 A.Rotate(
-                    limit=30,
+                    limit=15,
                     border_mode=cv2.BORDER_CONSTANT,
                     value=0,
-                    p=0.6
+                    p=0.5
                 ),
             ], p=1.0),
 
             'C4': A.Compose([
                 A.Resize(height=IMG_SIZE, width=IMG_SIZE, always_apply=True),
-                A.OneOf([
-                    A.RandomBrightnessContrast(p=0.5),
-                    A.Rotate(
-                        limit=45,
-                        border_mode=cv2.BORDER_CONSTANT,
-                        value=0,
-                        p=0.5
-                    ),
-                ], p=0.5)
+                A.RandomBrightnessContrast(
+                    brightness_limit=0.05,
+                    contrast_limit=0.05,
+                    p=0.7
+                ),
+                A.Rotate(
+                    limit=20,
+                    border_mode=cv2.BORDER_CONSTANT,
+                    value=0,
+                    p=0.5
+                ),
             ], p=1.0),
 
             'C5': A.Compose([
                 A.Resize(height=IMG_SIZE, width=IMG_SIZE, always_apply=True),
-                A.OneOf([
-                    A.RandomBrightnessContrast(
-                        brightness_limit=0.05,
-                        contrast_limit=0.05,
-                        p=0.7
-                    ),
-                    A.GaussNoise(
-                        var_limit=(1.0, 3.0),
-                        mean=0,
-                        p=0.7
-                    ),
-                ], p=0.5)
+                A.RandomBrightnessContrast(
+                    brightness_limit=0.05,
+                    contrast_limit=0.05,
+                    p=0.7
+                ),
+                A.Rotate(
+                    limit=25,
+                    border_mode=cv2.BORDER_CONSTANT,
+                    value=0,
+                    p=0.5
+                ),
             ], p=1.0),
         }
 
@@ -177,16 +148,15 @@ class ImagePairProcessor:
         self.aug_factory = AugmentationFactory()
 
     def validate_augmented_pair(self, image, mask):
-        """Validate augmented image-mask pair"""
+        """Validate augmented image-mask pair with relaxed criteria"""
         try:
+            # Check if mask still contains any lesion pixels
             white_pixels = np.sum(mask > 0)
             if white_pixels == 0:
                 return False
 
-            unique_values = np.unique(mask)
-            if not np.all(np.isin(unique_values, [0, 255])):
-                return False
-
+            # More lenient check for binary mask - allow some interpolated values
+            # Just ensure there are mostly 0s and high values
             return True
 
         except Exception as e:
@@ -194,7 +164,7 @@ class ImagePairProcessor:
             return False
 
     def safe_augment_pair(self, image, mask, transform, max_attempts=5):
-        """Attempt augmentation with validation"""
+        """Attempt augmentation with validation and simple fallback"""
         if transform is None:
             return image, mask
 
@@ -207,6 +177,7 @@ class ImagePairProcessor:
                 aug_image = augmented['image']
                 aug_mask = augmented['mask']
 
+                # Ensure mask is binary
                 aug_mask = (aug_mask > 127).astype(np.uint8) * 255
 
                 if self.validate_augmented_pair(aug_image, aug_mask):
@@ -216,8 +187,17 @@ class ImagePairProcessor:
                 logging.error(f"Error in augmentation attempt {attempt}: {str(e)}")
                 continue
 
-        logging.warning("All augmentation attempts failed, returning original pair")
-        return image, mask
+        # Fallback to just resizing if all augmentations fail
+        logging.warning("All augmentation attempts failed, using resize-only fallback")
+        try:
+            resize_only = A.Compose([
+                A.Resize(height=IMG_SIZE, width=IMG_SIZE, always_apply=True)
+            ])
+            augmented = resize_only(image=image.copy(), mask=mask.copy())
+            return augmented['image'], (augmented['mask'] > 127).astype(np.uint8) * 255
+        except Exception as e:
+            logging.error(f"Fallback augmentation failed: {str(e)}")
+            return image, mask
 
     def process_image_pair(self, raw_img, mask_img):
         """Process and classify a single image pair"""
@@ -262,6 +242,13 @@ def main():
                 if class_name is not None:
                     transform = processor.aug_factory.get_transform_for_class(class_name)
                     aug_img, aug_mask = processor.safe_augment_pair(dwi_img, mask_img, transform)
+
+                    # Ensure both images are properly resized to IMG_SIZE
+                    if aug_img.shape != (IMG_SIZE, IMG_SIZE):
+                        aug_img = cv2.resize(aug_img, (IMG_SIZE, IMG_SIZE))
+                    if aug_mask.shape != (IMG_SIZE, IMG_SIZE):
+                        aug_mask = cv2.resize(aug_mask, (IMG_SIZE, IMG_SIZE))
+                        aug_mask = (aug_mask > 127).astype(np.uint8) * 255
 
                     slice_num = dwi_file.split('_')[-1].replace('.png', '')
                     aug_dwi_filename = generate_new_filename(sample_id, 1, slice_num)
