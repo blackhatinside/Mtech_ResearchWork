@@ -18,7 +18,7 @@ from datetime import datetime
 # Constants and Paths for SISS2015
 BASE_PATH = "/home/user/adithyaes/dataset/siss15_png/SISS2015_Training"
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-OUTPUT_DIRECTORY = os.path.join("./output/SISS15_NoAug", timestamp)
+OUTPUT_DIRECTORY = os.path.join("./output/SISS15folder", timestamp)
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
 # Model parameters
