@@ -34,6 +34,12 @@ IMG_SIZE = 112
 DWI_MODALITY = 1
 MASK_MODALITY = 5
 
+def get_next_sample_id():
+    """Get the next available sample ID after existing ones"""
+    sample_dirs = [d for d in os.listdir(BASE_PATH) if os.path.isdir(os.path.join(BASE_PATH, d))]
+    sample_ids = [int(d) for d in sample_dirs if d.isdigit()]
+    return max(sample_ids) + 1 if sample_ids else 29  # Start from 29 if no samples exist
+
 class LesionClassifier:
     def __init__(self):
         self.class_ranges = {
@@ -171,7 +177,8 @@ def main():
                 # Classify
                 class_name = classifier.get_class(mask_img)
                 if class_name is not None:
-                    class_images[class_name].append((dwi_img, mask_img, dwi_file, mask_file, sample_id))
+                    slice_num = dwi_file.split('_slice_')[-1].replace('.png', '')
+                    class_images[class_name].append((dwi_img, mask_img, slice_num))
                     class_distribution[class_name] += 1
 
         # Find target count (maximum class size)
@@ -181,10 +188,15 @@ def main():
         for class_name, count in class_distribution.items():
             logging.info(f"{class_name}: {count} samples")
 
+        # Get next available sample ID for augmented images
+        next_sample_id = get_next_sample_id()
+        current_sample_id = next_sample_id
+        
         # Perform augmentation for each class
         logging.info("\nPerforming class-specific augmentation...")
         augmented_pairs = []
         augmented_distribution = defaultdict(int)
+        current_slice = 1  # Start slice numbering from 1 for each new patient
 
         for class_name, images in class_images.items():
             current_count = len(images)
@@ -196,7 +208,7 @@ def main():
 
                 logging.info(f"\nAugmenting class {class_name} ({current_count} → {target_count})")
 
-                for img, mask, dwi_file, mask_file, sample_id in tqdm(images):
+                for img, mask, original_slice_num in tqdm(images):
                     # Generate augmented versions
                     for aug_idx in range(multiplier - 1):
                         try:
@@ -212,9 +224,15 @@ def main():
                             
                             # Check if mask still has lesions
                             if np.sum(aug_mask > 0) > 0:
-                                slice_num = dwi_file.split('_slice_')[-1].replace('.png', '')
-                                augmented_pairs.append((aug_img, aug_mask, sample_id, slice_num))
+                                augmented_pairs.append((aug_img, aug_mask, current_sample_id, current_slice))
                                 augmented_distribution[class_name] += 1
+                                
+                                current_slice += 1
+                                # Start a new synthetic patient after every 50 slices
+                                if current_slice > 50:
+                                    current_sample_id += 1
+                                    current_slice = 1
+
                         except Exception as e:
                             logging.error(f"Error in augmentation: {str(e)}")
                             continue
@@ -230,6 +248,7 @@ def main():
 
         logging.info("\nAugmentation complete!")
         logging.info(f"Total augmented pairs generated: {len(augmented_pairs)}")
+        logging.info(f"New synthetic patients created: {current_sample_id - next_sample_id + 1}")
 
         # Final class distribution
         logging.info("\nFinal class distribution:")
