@@ -65,30 +65,30 @@ class AugmentationFactory:
                 A.Resize(height=IMG_SIZE, width=IMG_SIZE, always_apply=True),
                 A.OneOf([
                     A.RandomBrightnessContrast(
-                        brightness_limit=0.1,
-                        contrast_limit=0.1,
+                        brightness_limit=0.05,
+                        contrast_limit=0.05,
                         p=0.8
                     ),
                     A.GaussNoise(
-                        var_limit=(5.0, 20.0),
+                        var_limit=(1.0, 10.0),
                         mean=0,
                         p=0.8
                     ),
                     A.Blur(
-                        blur_limit=3,
+                        blur_limit=2,
                         p=0.8
                     ),
                 ], p=0.5),
                 A.OneOf([
                     A.Rotate(
-                        limit=15,
+                        limit=10,
                         border_mode=cv2.BORDER_CONSTANT,
                         value=0,
                         p=0.8
                     ),
                     A.ShiftScaleRotate(
                         shift_limit=0.0,
-                        scale_limit=0.1,
+                        scale_limit=0.05,
                         rotate_limit=0,
                         border_mode=cv2.BORDER_CONSTANT,
                         value=0,
