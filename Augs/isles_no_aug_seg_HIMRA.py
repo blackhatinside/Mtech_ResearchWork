@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 
 # Constants and Paths for ISLES2015
-BASE_PATH = "/home/user/adithyaes/dataset/isles2015/ISLES2015_Training"
+BASE_PATH = "/home/user/adithyaes/dataset/isles2022_png"
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 OUTPUT_DIRECTORY = os.path.join("./output/ISLES15_NoAug", timestamp)
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
