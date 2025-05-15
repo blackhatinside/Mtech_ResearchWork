@@ -183,7 +183,15 @@ def attention_occlusion(image, mask):
     
     return modulated_image, mask
 
-# Data Generator with Augmentation Saving
+# Add this function before the HIMRADataGenerator class
+def has_lesion(mask_path):
+    """Check if mask contains any lesion pixels"""
+    if not os.path.exists(mask_path):
+        return False
+    mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+    return np.sum(mask > 0) > 0
+
+# Then modify the HIMRADataGenerator class
 class HIMRADataGenerator(tf.keras.utils.Sequence):
     def __init__(self, list_IDs, aug_ids=None, batch_size=BATCH_SIZE, shuffle=True):
         self.batch_size = batch_size
@@ -191,51 +199,76 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
         self.aug_ids = aug_ids if aug_ids is not None else []
         self.all_ids = list_IDs + self.aug_ids
         self.shuffle = shuffle
+        self.file_pairs = self._get_valid_file_pairs()  # New method to filter slices
         self.__on_epoch_end()
         self.class_weights = {1: 2.0, 2: 1.5, 3: 1.2, 4: 1.0, 5: 1.0}
 
-    def __len__(self):
-        return int(np.floor(len(self.all_ids) / self.batch_size))
-
-    def __getitem__(self, index):
-        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
-        batch_ids = [self.all_ids[k] for k in indexes]
-        return self.__data_generation(batch_ids)
-
-    def __on_epoch_end(self):
-        self.indexes = np.arange(len(self.all_ids))
-        if self.shuffle:
-            np.random.shuffle(self.indexes)
-
-    def __data_generation(self, batch_ids):
-        X, y = [], []
-        for case_id in batch_ids:
+    def _get_valid_file_pairs(self):
+        """Get all valid image-mask pairs that contain lesions"""
+        valid_pairs = []
+        
+        for case_id in self.all_ids:
             is_aug = case_id in self.aug_ids
             input_dir = AUG_INPUT_PATH if is_aug else INPUT_PATH
             mask_dir = AUG_MASK_PATH if is_aug else MASK_PATH
-
+            
+            # Find all input files for this case
             input_files = sorted([f for f in os.listdir(input_dir)
                                 if f.startswith(f'slice_{case_id}') and f.endswith('.png')])
 
             for f in input_files:
-                img_path = os.path.join(input_dir, f)
+                # Check corresponding mask for lesions
                 mask_path = os.path.join(mask_dir, f)
+                
+                if has_lesion(mask_path):
+                    valid_pairs.append({
+                        'case_id': case_id,
+                        'filename': f,
+                        'is_aug': is_aug
+                    })
+        
+        return valid_pairs
 
-                img = load_and_preprocess(img_path)
-                mask = load_and_preprocess(mask_path, is_mask=True)
+    def __len__(self):
+        return int(np.floor(len(self.file_pairs) / self.batch_size))
 
-                lesion_size = np.sum(mask)
-                lesion_class = 1 if lesion_size < 50 else 2 if lesion_size < 100 else 3 if lesion_size < 150 else 4 if lesion_size < 200 else 5
+    def __getitem__(self, index):
+        indexes = self.indexes[index*self.batch_size:(index+1)*self.batch_size]
+        batch_pairs = [self.file_pairs[k] for k in indexes]
+        return self.__data_generation(batch_pairs)
 
-                if is_aug:
-                    img, mask = biomechanical_deformation(img, mask, lesion_class)
-                    img, mask = simulate_hemodynamics(img, mask, lesion_class)
-                    # img, mask = attention_occlusion(img, mask)
-                    
-                    self.__save_augmented_data(img, mask, f)
+    def __on_epoch_end(self):
+        self.indexes = np.arange(len(self.file_pairs))
+        if self.shuffle:
+            np.random.shuffle(self.indexes)
 
-                X.append(img)
-                y.append(mask)
+    def __data_generation(self, batch_pairs):
+        X, y = [], []
+        for pair in batch_pairs:
+            case_id = pair['case_id']
+            f = pair['filename']
+            is_aug = pair['is_aug']
+            
+            input_dir = AUG_INPUT_PATH if is_aug else INPUT_PATH
+            mask_dir = AUG_MASK_PATH if is_aug else MASK_PATH
+
+            img_path = os.path.join(input_dir, f)
+            mask_path = os.path.join(mask_dir, f)
+
+            img = load_and_preprocess(img_path)
+            mask = load_and_preprocess(mask_path, is_mask=True)
+
+            lesion_size = np.sum(mask)
+            lesion_class = 1 if lesion_size < 50 else 2 if lesion_size < 100 else 3 if lesion_size < 150 else 4 if lesion_size < 200 else 5
+
+            if is_aug:
+                img, mask = biomechanical_deformation(img, mask, lesion_class)
+                img, mask = simulate_hemodynamics(img, mask, lesion_class)
+                
+                self.__save_augmented_data(img, mask, f)
+
+            X.append(img)
+            y.append(mask)
 
         return np.expand_dims(np.array(X), -1), np.expand_dims(np.array(y), -1)
 
