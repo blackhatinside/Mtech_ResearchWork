@@ -29,7 +29,7 @@ os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
 IMG_SIZE = 112
 BATCH_SIZE = 32
-LEARNINGRATE = 0.001
+LEARNINGRATE = 0.0001
 EPOCHS = 100
 EARLYSTOPPING = 60
 scaler = MinMaxScaler(feature_range=(-1, 1))
