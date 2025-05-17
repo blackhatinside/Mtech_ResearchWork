@@ -28,7 +28,7 @@ OUTPUT_DIRECTORY = os.path.join("./output/ISLES22folder", timestamp)
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
 IMG_SIZE = 112
-BATCH_SIZE = 4
+BATCH_SIZE = 16
 LEARNINGRATE = 0.001
 EPOCHS = 100
 EARLYSTOPPING = 60
