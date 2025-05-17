@@ -28,7 +28,7 @@ OUTPUT_DIRECTORY = os.path.join("./output/ISLES22folder", timestamp)
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
 IMG_SIZE = 112
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 LEARNINGRATE = 0.001
 EPOCHS = 100
 EARLYSTOPPING = 60
@@ -70,11 +70,12 @@ def hybrid_loss(y_true, y_pred):
     weight = tf.where(lesion_size < 50, 2.0, 1.0)
     
     dice_loss = single_dice_loss(y_true, y_pred)
-    focal_loss = binary_focal_loss(gamma=2.5, alpha=0.3)(y_true, y_pred)
-    bce_loss = binary_crossentropy_loss(y_true, y_pred)
+    # focal_loss = binary_focal_loss(gamma=2.5, alpha=0.3)(y_true, y_pred)
+    # bce_loss = binary_crossentropy_loss(y_true, y_pred)
     
-    combined_loss = weight * (0.5 * dice_loss + 0.4 * focal_loss + 0.1 * bce_loss)
-    return combined_loss
+    # combined_loss = weight * (0.5 * dice_loss + 0.4 * focal_loss + 0.1 * bce_loss)
+    # return combined_loss
+    return dice_loss
 
 # Data Loading
 def load_and_preprocess(file_path, is_mask=False):
