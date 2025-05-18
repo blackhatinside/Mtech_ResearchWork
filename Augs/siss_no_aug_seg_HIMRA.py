@@ -23,10 +23,13 @@ os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
 # Model parameters
 IMG_SIZE = 112
-BATCH_SIZE = 4
+# BATCH_SIZE = 4
+BATCH_SIZE = 32
 LEARNINGRATE = 0.0001
-EPOCHS = 100
-EARLYSTOPPING = 60
+# EPOCHS = 100
+EPOCHS = 50
+# EARLYSTOPPING = 60
+EARLYSTOPPING = 30
 scaler = MinMaxScaler(feature_range=(-1, 1))
 
 # DWI modality = 1, Mask modality = 5
