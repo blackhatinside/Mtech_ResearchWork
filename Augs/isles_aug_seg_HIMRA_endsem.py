@@ -451,6 +451,54 @@ if __name__ == "__main__":
     case_ids = get_case_ids(INPUT_PATH)
     aug_case_ids = get_case_ids(AUG_INPUT_PATH) if os.path.exists(AUG_INPUT_PATH) else []
 
+    # --->
+    # Visualization of augmentation effects
+    VISUALIZATION_DIR = os.path.join(OUTPUT_DIRECTORY, "visualization")
+    os.makedirs(VISUALIZATION_DIR, exist_ok=True)
+
+    original_file_pairs = get_original_file_pairs()
+
+    selected_samples = {cls: None for cls in ['C1', 'C2', 'C3', 'C4', 'C5']}
+    for pair in original_file_pairs:
+        mask_path = os.path.join(MASK_PATH, pair['filename'])
+        mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE) / 255.0
+        lesion_size = np.sum(mask)
+        lesion_class = get_lesion_class(lesion_size)
+        if selected_samples[lesion_class] is None:
+            selected_samples[lesion_class] = pair
+            if all(v is not None for v in selected_samples.values()):
+                break
+
+    for cls, pair in selected_samples.items():
+        if pair is not None:
+            case_num, slice_num = extract_case_slice(pair['filename'])
+            sample_dir = os.path.join(VISUALIZATION_DIR, f"{case_num}_slice{slice_num}")
+            os.makedirs(sample_dir, exist_ok=True)
+
+            # Load original image and mask
+            img_path = os.path.join(INPUT_PATH, pair['filename'])
+            mask_path = os.path.join(MASK_PATH, pair['filename'])
+            original_img = load_and_preprocess(img_path)
+            original_mask = load_and_preprocess(mask_path, is_mask=True)
+
+            # Save original image and mask
+            original_img_uint8 = ((original_img + 1) / 2 * 255).astype(np.uint8)
+            original_mask_uint8 = (original_mask * 255).astype(np.uint8)
+            cv2.imwrite(os.path.join(sample_dir, "original_image.png"), original_img_uint8)
+            cv2.imwrite(os.path.join(sample_dir, "original_mask.png"), original_mask_uint8)
+
+            # Apply augmentation
+            lesion_class_num = int(cls[1])  # C1 -> 1, etc.
+ |           aug_img, aug_mask = biomechanical_deformation(original_img, original_mask, lesion_class_num)
+            aug_img, aug_mask = simulate_hemodynamics(aug_img, aug_mask, lesion_class_num)
+
+            # Save augmented image and mask
+            aug_img_uint8 = ((aug_img + 1) / 2 * 255).astype(np.uint8)
+            aug_mask_uint8 = (aug_mask * 255).astype(np.uint8)
+            cv2.imwrite(os.path.join(sample_dir, "augmented_image.png"), aug_img_uint8)
+            cv2.imwrite(os.path.join(sample_dir, "augmented_mask.png"), aug_mask_uint8)
+    # <---
+
     train_ids, test_ids = train_test_split(case_ids, test_size=0.2, random_state=42)
     train_ids, val_ids = train_test_split(train_ids, test_size=0.2, random_state=42)
 
