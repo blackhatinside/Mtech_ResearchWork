@@ -66,15 +66,16 @@ def binary_focal_loss(gamma=2., alpha=0.25):
     return focal_loss
 
 def hybrid_loss(y_true, y_pred):
-    lesion_size = K.sum(y_true)
-    weight = tf.where(lesion_size < 50, 2.0, 1.0)
-    
-    dice_loss = single_dice_loss(y_true, y_pred)
-    focal_loss = binary_focal_loss(gamma=2.5, alpha=0.3)(y_true, y_pred)
-    bce_loss = binary_crossentropy_loss(y_true, y_pred)
-    
-    combined_loss = weight * (0.5 * dice_loss + 0.4 * focal_loss + 0.1 * bce_loss)
-    return combined_loss
+	lesion_size = K.sum(y_true)
+	weight = tf.where(lesion_size < 50, 2.0, 1.0)
+	
+	dice_loss = single_dice_loss(y_true, y_pred)
+	# focal_loss = binary_focal_loss(gamma=2.5, alpha=0.3)(y_true, y_pred)
+	# bce_loss = binary_crossentropy_loss(y_true, y_pred)
+	
+	# combined_loss = weight * (0.5 * dice_loss + 0.4 * focal_loss + 0.1 * bce_loss)
+	# return combined_loss
+	return dice_loss
 
 # Data Loading
 def load_and_preprocess(file_path, is_mask=False):
