@@ -283,7 +283,8 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
         image_filename = os.path.join(augmented_image_dir, filename)
         mask_filename = os.path.join(augmented_mask_dir, filename.replace('slice', 'mask'))
 
-        cv2.imwrite(image_filename, image * 255)
+        # cv2.imwrite(image_filename, image * 255)
+        cv2.imwrite(image_filename, ((image + 1) / 2 * 255).astype(np.uint8))
         cv2.imwrite(mask_filename, mask * 255)
 
 # Model Architecture
