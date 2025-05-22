@@ -368,14 +368,15 @@ def visualize_augmentation_process(processor):
     
     logging.info("Generating augmentation visualizations...")
     
-    # Get a few samples from each class
-    class_samples = {}
+    # Store samples for each class (5 per class)
+    class_samples = {f'C{i}': [] for i in range(1, 6)}
+    samples_per_class = 5
     
-    # Get one sample from each class
-    for raw_f, mask_f in zip(
-        sorted([f for f in os.listdir(PATH_RAWDATA) if f.endswith('.png')]),
-        sorted([f for f in os.listdir(PATH_DERIVATIVES) if f.endswith('.png')])
-    ):
+    # Collect samples from each class
+    raw_files = sorted([f for f in os.listdir(PATH_RAWDATA) if f.endswith('.png')])
+    mask_files = sorted([f for f in os.listdir(PATH_DERIVATIVES) if f.endswith('.png')])
+    
+    for raw_f, mask_f in zip(raw_files, mask_files):
         # Load images
         raw_img = cv2.imread(os.path.join(PATH_RAWDATA, raw_f), cv2.IMREAD_GRAYSCALE)
         mask_img = cv2.imread(os.path.join(PATH_DERIVATIVES, mask_f), cv2.IMREAD_GRAYSCALE)
@@ -388,74 +389,77 @@ def visualize_augmentation_process(processor):
         if class_name is None:
             continue
         
-        # Store one sample per class
-        if class_name not in class_samples:
-            class_samples[class_name] = (raw_img, mask_img, raw_f, mask_f)
-            
-            # If we have samples from all classes, stop
-            if len(class_samples) == 5:  # We have 5 classes (C1-C5)
-                break
+        # Add to class samples if we need more
+        if len(class_samples[class_name]) < samples_per_class:
+            class_samples[class_name].append((raw_img, mask_img, raw_f, mask_f))
+        
+        # Check if we have enough samples in all classes
+        if all(len(samples) >= samples_per_class for samples in class_samples.values()):
+            break
     
-    # Process each sample
-    for class_name, (raw_img, mask_img, raw_f, mask_f) in class_samples.items():
+    # Process each sample from each class
+    for class_name, samples in class_samples.items():
+        logging.info(f"Creating visualizations for class {class_name}: {len(samples)} samples")
+        
         # Get transform for this class
         transform = processor.aug_factory.get_transform_for_class(class_name)
         
-        # Apply augmentation
-        aug_img, aug_mask = processor.safe_augment_pair(raw_img, mask_img, transform)
-        
-        # Extract case and slice numbers for filename
-        parts = raw_f.split('_')
-        case_part = parts[1]  # "sub-strokecase0252"
-        slice_str = parts[2].split('.')[0]  # "0042"
-        case_num = re.search(r'\d+', case_part).group()  # "0252"
-        
-        # Create visualization
-        plt.figure(figsize=(20, 5))
-        
-        # Original image
-        plt.subplot(1, 4, 1)
-        plt.imshow(raw_img, cmap='gray')
-        plt.title('Original Image')
-        plt.axis('off')
-        
-        # Original mask
-        plt.subplot(1, 4, 2)
-        plt.imshow(mask_img, cmap='gray')
-        plt.title('Original Mask')
-        plt.axis('off')
-        
-        # Augmented image
-        plt.subplot(1, 4, 3)
-        plt.imshow(aug_img, cmap='gray')
-        plt.title(f'Augmented Image ({class_name})')
-        plt.axis('off')
-        
-        # Augmented mask
-        plt.subplot(1, 4, 4)
-        plt.imshow(aug_mask, cmap='gray')
-        plt.title('Augmented Mask')
-        plt.axis('off')
-        
-        # Add text with augmentation description
-        if class_name == 'C1':
-            aug_desc = "Small lesion (1-50 pixels): High deformation + intensity"
-        elif class_name == 'C2':
-            aug_desc = "Medium-small lesion (51-100 pixels): Medium deformation"
-        elif class_name == 'C3':
-            aug_desc = "Medium lesion (101-150 pixels): Moderate rotation + contrast"
-        elif class_name == 'C4':
-            aug_desc = "Medium-large lesion (151-200 pixels): Limited rotation"
-        else:  # C5
-            aug_desc = "Large lesion (>200 pixels): Minimal intensity changes only"
+        for idx, (raw_img, mask_img, raw_f, mask_f) in enumerate(samples):
+            # Apply augmentation
+            aug_img, aug_mask = processor.safe_augment_pair(raw_img, mask_img, transform)
             
-        plt.suptitle(f"Case {case_num}, Slice {slice_str}: {aug_desc}", fontsize=16)
-        
-        # Save visualization
-        plt.tight_layout()
-        filename = f"{case_num}_slice{slice_str}.png"
-        plt.savefig(os.path.join(vis_dir, filename), bbox_inches='tight', dpi=300)
-        plt.close()
+            # Extract case and slice numbers for filename
+            parts = raw_f.split('_')
+            case_part = parts[1]  # "sub-strokecase0252"
+            slice_str = parts[2].split('.')[0]  # "0042"
+            case_num = re.search(r'\d+', case_part).group()  # "0252"
+            
+            # Create visualization
+            plt.figure(figsize=(20, 5))
+            
+            # Original image
+            plt.subplot(1, 4, 1)
+            plt.imshow(raw_img, cmap='gray')
+            plt.title('Original Image')
+            plt.axis('off')
+            
+            # Original mask
+            plt.subplot(1, 4, 2)
+            plt.imshow(mask_img, cmap='gray')
+            plt.title('Original Mask')
+            plt.axis('off')
+            
+            # Augmented image
+            plt.subplot(1, 4, 3)
+            plt.imshow(aug_img, cmap='gray')
+            plt.title(f'Augmented Image ({class_name})')
+            plt.axis('off')
+            
+            # Augmented mask
+            plt.subplot(1, 4, 4)
+            plt.imshow(aug_mask, cmap='gray')
+            plt.title('Augmented Mask')
+            plt.axis('off')
+            
+            # Add text with augmentation description
+            if class_name == 'C1':
+                aug_desc = "Small lesion (1-50 pixels): High deformation + intensity"
+            elif class_name == 'C2':
+                aug_desc = "Medium-small lesion (51-100 pixels): Medium deformation"
+            elif class_name == 'C3':
+                aug_desc = "Medium lesion (101-150 pixels): Moderate rotation + contrast"
+            elif class_name == 'C4':
+                aug_desc = "Medium-large lesion (151-200 pixels): Limited rotation"
+            else:  # C5
+                aug_desc = "Large lesion (>200 pixels): Minimal intensity changes only"
+                
+            plt.suptitle(f"Case {case_num}, Slice {slice_str}: {aug_desc}", fontsize=16)
+            
+            # Save visualization
+            plt.tight_layout()
+            filename = f"{class_name}_{case_num}_slice{slice_str}.png"
+            plt.savefig(os.path.join(vis_dir, filename), bbox_inches='tight', dpi=300)
+            plt.close()
     
     logging.info(f"Saved augmentation visualizations to {vis_dir}/")
 
