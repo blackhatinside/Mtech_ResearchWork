@@ -78,16 +78,6 @@ def hybrid_loss(y_true, y_pred):
 	# return combined_loss
 	return dice_loss
 
-# Data Loading
-def load_and_preprocess(file_path, is_mask=False):
-	img = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
-	img = cv2.resize(img, (IMG_SIZE, IMG_SIZE))
-	if not is_mask:
-		img = scaler.fit_transform(img.reshape(-1, 1)).reshape(img.shape)
-	else:
-		img = img / 255.0
-	return img
-
 # HIMRA Augmentation Functions
 def grow_small_lesion(image, mask, target_size=45):
 	brain_mask = (image != -1)
@@ -185,13 +175,23 @@ def attention_occlusion(image, mask):
 	
 	return modulated_image, mask
 
-# Add this function before the HIMRADataGenerator class
+# Add these function before the HIMRADataGenerator class
 def has_lesion(mask_path):
 	"""Check if mask contains any lesion pixels"""
 	if not os.path.exists(mask_path):
 		return False
 	mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
 	return np.sum(mask > 0) > 0
+
+# Data Loading
+def load_and_preprocess(file_path, is_mask=False):
+	img = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
+	img = cv2.resize(img, (IMG_SIZE, IMG_SIZE))
+	if not is_mask:
+		img = scaler.fit_transform(img.reshape(-1, 1)).reshape(img.shape)
+	else:
+		img = img / 255.0
+	return img
 
 # Then modify the HIMRADataGenerator class
 class HIMRADataGenerator(tf.keras.utils.Sequence):
@@ -364,7 +364,7 @@ def numpy_dice_coeff(y_true, y_pred):
 	intersection = np.sum(y_true_f * y_pred_f)
 	return (2. * intersection + 1) / (np.sum(y_true_f) + np.sum(y_pred_f) + 1)
 
-def plot_training_metrics(history):
+def plot_training_metrics_4x4(history):
 	metrics = ['loss', 'dice_coeff', 'iou', 'accuracy']
 	fig, axes = plt.subplots(2, 2, figsize=(15, 10))
 	fig.suptitle('Training Metrics Over Epochs', fontsize=16)
@@ -385,6 +385,35 @@ def plot_training_metrics(history):
 				bbox_inches='tight', dpi=300)
 	plt.close()
 
+def plot_training_metrics_3x3(history):
+    metrics = ['loss', 'dice_coeff', 'accuracy']
+    titles = ['Loss', 'Dice Coefficient', 'Accuracy']
+    
+    plt.figure(figsize=(20, 5))
+    
+    for i, (metric, title) in enumerate(zip(metrics, titles)):
+        plt.subplot(1, 3, i+1)
+        plt.plot(history.history[metric], label=f'Training {title}')
+        plt.plot(history.history[f'val_{metric}'], label=f'Validation {title}')
+        plt.title(f'Training and Validation {title}')
+        plt.legend()
+    
+    plt.tight_layout()
+    plt.savefig('./output/ISLESfolder/training_history.png')
+    plt.close()
+
+def get_lesion_class(lesion_size):
+    if lesion_size <= 50:
+        return 'C1'
+    elif lesion_size <= 100:
+        return 'C2'
+    elif lesion_size <= 150:
+        return 'C3'
+    elif lesion_size <= 200:
+        return 'C4'
+    else:
+        return 'C5'
+	
 # Class-wise Dice Score Calculation
 def calculate_class_wise_dice(model, test_gen):
 	class_dice_scores = {f'C{i}': [] for i in range(1, 6)}
@@ -401,16 +430,8 @@ def calculate_class_wise_dice(model, test_gen):
 			
 			if lesion_size == 0:
 				continue
-			elif lesion_size <= 50:
-				class_name = 'C1'
-			elif lesion_size <= 100:
-				class_name = 'C2'
-			elif lesion_size <= 150:
-				class_name = 'C3'
-			elif lesion_size <= 200:
-				class_name = 'C4'
 			else:
-				class_name = 'C5'
+				class_name = get_lesion_class(lesion_size)
 			
 			dice = numpy_dice_coeff(true_mask, pred_mask)
 			class_dice_scores[class_name].append(dice)
@@ -458,17 +479,7 @@ def get_original_file_pairs():
                 })
     return valid_pairs
 
-def get_lesion_class(lesion_size):
-    if lesion_size < 50:
-        return 'C1'
-    elif lesion_size < 100:
-        return 'C2'
-    elif lesion_size < 150:
-        return 'C3'
-    elif lesion_size < 200:
-        return 'C4'
-    else:
-        return 'C5'
+
 
 def extract_case_slice(filename):
     parts = filename.split('_')
@@ -580,7 +591,8 @@ if __name__ == "__main__":
 	print(f"IoU: {results[3]:.4f}")
 
 	# Save Training Metrics
-	plot_training_metrics(history)
+	# plot_training_metrics_4x4(history)
+	plot_training_metrics_3x3(history)
 
 	# Calculate and Visualize Class-wise Dice Scores
 	class_wise_dice = calculate_class_wise_dice(model, test_gen)
