@@ -18,7 +18,7 @@ OUTPUT_DIRECTORY = "./output/ISLESfolder_original_only"
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
 IMG_SIZE = 112
-BATCH_SIZE = 8
+BATCH_SIZE = 4
 LEARNINGRATE = 0.0001
 EPOCHS = 100
 EARLYSTOPPING = 60
