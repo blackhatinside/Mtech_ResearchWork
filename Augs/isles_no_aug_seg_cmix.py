@@ -18,10 +18,10 @@ OUTPUT_DIRECTORY = "./output/ISLESfolder_original_only"
 os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
 IMG_SIZE = 112
-BATCH_SIZE = 4
-LEARNINGRATE = 0.001
+BATCH_SIZE = 32
+LEARNINGRATE = 0.0001
 EPOCHS = 100
-EARLYSTOPPING = 40
+EARLYSTOPPING = 60
 scaler = MinMaxScaler(feature_range=(-1, 1))
 
 def dice_coeff(y_true, y_pred):
@@ -142,54 +142,50 @@ class DataGenerator(tf.keras.utils.Sequence):
 def create_model():
 	inputs = Input((IMG_SIZE, IMG_SIZE, 1))
 
-	# Encoder with reduced filters
-	x = conv_block(inputs, 32)
+	x = conv_block(inputs, 16)
 	skip1 = x
 	x = MaxPooling2D()(x)
 
-	x = conv_block(x, 64)
+	x = conv_block(x, 32)
 	skip2 = x
 	x = MaxPooling2D()(x)
 
-	x = conv_block(x, 128)
+	x = conv_block(x, 64)
 	skip3 = x
 	x = MaxPooling2D()(x)
 
-	x = conv_block(x, 256)
+	x = conv_block(x, 128)
 	skip4 = x
 	x = MaxPooling2D()(x)
 
-	# Bridge
-	x = conv_block(x, 512)
-
-	# Decoder with attention
-	x = Conv2DTranspose(256, 3, strides=2, padding='same')(x)
-	x = attention_gate(skip4, x, 256)
-	x = concatenate([x, skip4])
 	x = conv_block(x, 256)
 
 	x = Conv2DTranspose(128, 3, strides=2, padding='same')(x)
-	x = attention_gate(skip3, x, 128)
-	x = concatenate([x, skip3])
+	x = attention_gate(skip4, x, 128)
+	x = concatenate([x, skip4])
 	x = conv_block(x, 128)
 
 	x = Conv2DTranspose(64, 3, strides=2, padding='same')(x)
-	x = attention_gate(skip2, x, 64)
-	x = concatenate([x, skip2])
+	x = attention_gate(skip3, x, 64)
+	x = concatenate([x, skip3])
 	x = conv_block(x, 64)
 
 	x = Conv2DTranspose(32, 3, strides=2, padding='same')(x)
-	x = attention_gate(skip1, x, 32)
-	x = concatenate([x, skip1])
+	x = attention_gate(skip2, x, 32)
+	x = concatenate([x, skip2])
 	x = conv_block(x, 32)
+
+	x = Conv2DTranspose(16, 3, strides=2, padding='same')(x)
+	x = attention_gate(skip1, x, 16)
+	x = concatenate([x, skip1])
+	x = conv_block(x, 16)
 
 	outputs = Conv2D(1, 1, activation='sigmoid')(x)
 
 	model = Model(inputs, outputs)
-
 	model.compile(
 		optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNINGRATE),
-		loss=dice_loss,
+		loss=dice_loss
 		metrics=['accuracy', dice_coeff, iou]
 	)
 
