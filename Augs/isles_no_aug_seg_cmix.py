@@ -185,7 +185,7 @@ def create_model():
 	model = Model(inputs, outputs)
 	model.compile(
 		optimizer=tf.keras.optimizers.Adam(learning_rate=LEARNINGRATE),
-		loss=dice_loss
+		loss=dice_loss,
 		metrics=['accuracy', dice_coeff, iou]
 	)
 
