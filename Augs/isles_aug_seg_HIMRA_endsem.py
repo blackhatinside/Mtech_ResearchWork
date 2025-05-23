@@ -128,7 +128,13 @@ def biomechanical_deformation(image, mask, lesion_class):
 	y, x = np.meshgrid(np.arange(image.shape[0]), np.arange(image.shape[1]), indexing='ij')
 	deformed_coords = np.stack([y + dy * 5, x + dx * 5])
 	
-	return map_coordinates(image, deformed_coords, order=1, mode='reflect'), map_coordinates(mask, deformed_coords, order=0, mode='constant')
+	deformed_image = map_coordinates(image, deformed_coords, order=1, mode='reflect')
+	deformed_mask = map_coordinates(mask, deformed_coords, order=0, mode='constant')
+	
+	brain_mask = (image != -1)
+	deformed_mask = deformed_mask & brain_mask  # Clip to brain boundaries
+	
+	return deformed_image, deformed_mask
 
 def simulate_hemodynamics(image, mask, lesion_class):
 	contrasts = {
@@ -263,7 +269,7 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
 			lesion_size = np.sum(mask)
 			lesion_class = 1 if lesion_size < 50 else 2 if lesion_size < 100 else 3 if lesion_size < 150 else 4 if lesion_size < 200 else 5
 
-			if is_aug:
+			if not is_aug:
 				img, mask = biomechanical_deformation(img, mask, lesion_class)
 				img, mask = simulate_hemodynamics(img, mask, lesion_class)
 				
