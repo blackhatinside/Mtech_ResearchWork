@@ -269,7 +269,7 @@ class HIMRADataGenerator(tf.keras.utils.Sequence):
 			lesion_size = np.sum(mask)
 			lesion_class = 1 if lesion_size < 50 else 2 if lesion_size < 100 else 3 if lesion_size < 150 else 4 if lesion_size < 200 else 5
 
-			if not is_aug:
+			if is_aug:
 				img, mask = biomechanical_deformation(img, mask, lesion_class)
 				img, mask = simulate_hemodynamics(img, mask, lesion_class)
 				
