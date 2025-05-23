@@ -132,9 +132,9 @@ def biomechanical_deformation(image, mask, lesion_class):
 	deformed_mask = map_coordinates(mask, deformed_coords, order=0, mode='constant')
 	
 	brain_mask = (image != -1)
-	deformed_mask = deformed_mask & brain_mask  # Clip to brain boundaries
+	deformed_mask = (deformed_mask > 0.5) & brain_mask  # Clip to brain boundaries
 	
-	return deformed_image, deformed_mask
+	return deformed_image, deformed_mask.astype(mask.dtype)
 
 def simulate_hemodynamics(image, mask, lesion_class):
 	contrasts = {
